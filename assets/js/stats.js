@@ -30,6 +30,19 @@
     return roundTotal(round) - coursePar(round);
   }
 
+  // Running cumulative score-to-par after each hole (the card's TOT row).
+  // Holes without a score carry the previous running value forward.
+  function cumulativeToPar(round) {
+    const out = [];
+    let running = 0;
+    for (var i = 0; i < round.holes; i++) {
+      const s = round.scores[i], p = round.pars[i];
+      if (typeof s === "number" && typeof p === "number") running += s - p;
+      out.push(typeof s === "number" ? running : null);
+    }
+    return out;
+  }
+
   // Normalize a 9-hole round to an 18-hole equivalent for fair comparison.
   function total18(round) {
     const t = roundTotal(round);
@@ -220,6 +233,7 @@
     roundTotal: roundTotal,
     coursePar: coursePar,
     toPar: toPar,
+    cumulativeToPar: cumulativeToPar,
     total18: total18,
     toPar18: toPar18,
     roundsFor: roundsFor,
