@@ -512,8 +512,11 @@
           course: "", tee: "", holes: 18,
           pars: Store.standardPars(18), scores: new Array(18).fill(null),
           fairways: new Array(18).fill(null), putts: new Array(18).fill(null),
-          girs: new Array(18).fill(null),
+          girs: new Array(18).fill(null), yards: new Array(18).fill(null),
+          si: new Array(18).fill(null), pace: new Array(18).fill(""),
           courseRating: null, slopeRating: null,
+          frontRating: null, frontSlope: null, backRating: null, backSlope: null,
+          roundNo: null, startHole: null, scorer: "", attest: "", attestedAt: "",
           stats: null, photo: null, notes: "",
         };
 
@@ -538,12 +541,23 @@
       '<div class="field"><label>Holes</label><select id="rf-holes"><option value="18"' + (r.holes === 18 ? " selected" : "") + '>18</option><option value="9"' + (r.holes === 9 ? " selected" : "") + '>9</option></select></div>' +
       '</div>' +
       '<div class="form-row">' +
-      '<div class="field"><label>Course rating <span class="help">for handicap</span></label><input type="number" step="0.1" id="rf-rating" value="' + (r.courseRating != null ? r.courseRating : "") + '" placeholder="e.g. 70.1"></div>' +
+      '<div class="field"><label>Course rating <span class="help">18-hole, for handicap</span></label><input type="number" step="0.1" id="rf-rating" value="' + (r.courseRating != null ? r.courseRating : "") + '" placeholder="e.g. 70.1"></div>' +
       '<div class="field"><label>Slope rating</label><input type="number" id="rf-slope" value="' + (r.slopeRating != null ? r.slopeRating : "") + '" placeholder="e.g. 124"></div>' +
       '</div>' +
-      '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">' +
+      '<details' + (r.frontRating != null || r.scorer || r.roundNo != null ? " open" : "") + '><summary style="cursor:pointer;font-weight:600;color:var(--muted)">Card details (tee splits, round #, scorer)</summary>' +
+      '<div class="form-row" style="margin-top:12px">' +
+      '<div class="field"><label>Front rating / slope</label><div style="display:flex;gap:6px"><input type="number" step="0.1" id="rf-frating" value="' + (r.frontRating != null ? r.frontRating : "") + '" placeholder="34.6"><input type="number" id="rf-fslope" value="' + (r.frontSlope != null ? r.frontSlope : "") + '" placeholder="121"></div></div>' +
+      '<div class="field"><label>Back rating / slope</label><div style="display:flex;gap:6px"><input type="number" step="0.1" id="rf-brating" value="' + (r.backRating != null ? r.backRating : "") + '" placeholder="35.5"><input type="number" id="rf-bslope" value="' + (r.backSlope != null ? r.backSlope : "") + '" placeholder="127"></div></div>' +
+      '</div>' +
+      '<div class="form-row">' +
+      '<div class="field"><label>Round #</label><input type="number" id="rf-roundno" min="1" value="' + (r.roundNo != null ? r.roundNo : "") + '" placeholder="1"></div>' +
+      '<div class="field"><label>Starting hole</label><input type="number" id="rf-starthole" min="1" max="18" value="' + (r.startHole != null ? r.startHole : "") + '" placeholder="1"></div>' +
+      '<div class="field"><label>Scorer</label><input id="rf-scorer" value="' + esc(r.scorer || "") + '" placeholder="e.g. Gavyn Luke"></div>' +
+      '<div class="field"><label>Attested by</label><input id="rf-attest" value="' + esc(r.attest || "") + '" placeholder="e.g. Daniel Jensen"></div>' +
+      '</div></details>' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:10px">' +
       '<label style="margin:0">Scorecard <span class="help">Par + strokes per hole; totals update live.</span></label>' +
-      '<label style="display:flex;align-items:center;gap:6px;margin:0;cursor:pointer"><input type="checkbox" id="rf-detailed" style="width:auto"> Track fairways / putts / GIR</label>' +
+      '<label style="display:flex;align-items:center;gap:6px;margin:0;cursor:pointer"><input type="checkbox" id="rf-detailed" style="width:auto"> Full card (yardage, SI, fwy, putts, GIR, pace)</label>' +
       '</div>' +
       '<div id="rf-scorecard" class="scorecard"></div>' +
       '<hr class="divider">' +
@@ -560,10 +574,13 @@
     let fairways = (r.fairways || []).slice();
     let putts = (r.putts || []).slice();
     let girs = (r.girs || []).slice();
+    let yards = (r.yards || []).slice();
+    let si = (r.si || []).slice();
+    let pace = (r.pace || []).slice();
     let photo = r.photo;
-    let detailed = (r.fairways || []).some(function (v) { return v !== null; }) ||
-      (r.putts || []).some(function (v) { return v != null; }) ||
-      (r.girs || []).some(function (v) { return v !== null; });
+    let detailed = [r.fairways, r.putts, r.girs, r.yards, r.si].some(function (a) {
+      return (a || []).some(function (v) { return v !== null; });
+    }) || (r.pace || []).some(function (v) { return v; });
 
     function fit(arr, holes, fill) {
       if (arr.length !== holes) { const a = new Array(holes).fill(fill); for (var i = 0; i < Math.min(arr.length, holes); i++) a[i] = arr[i]; return a; }
@@ -584,6 +601,9 @@
       fairways = fit(fairways, holes, null);
       putts = fit(putts, holes, null);
       girs = fit(girs, holes, null);
+      yards = fit(yards, holes, null);
+      si = fit(si, holes, null);
+      pace = fit(pace, holes, "");
       const box = $("#rf-scorecard");
       const half = holes === 18 ? 9 : holes;
 
@@ -592,6 +612,14 @@
         let h = "<tr><th>Hole</th>";
         for (var i = start; i < end; i++) h += "<th>" + (i + 1) + "</th>";
         h += '<th class="hole-total">' + (holes === 18 ? (start === 0 ? "Out" : "In") : "Tot") + "</th></tr>";
+        if (detailed) {
+          h += '<tr><th>Yds</th>';
+          for (var y = start; y < end; y++) h += '<td><input class="yds-in" data-i="' + y + '" type="number" min="0" value="' + (yards[y] == null ? "" : yards[y]) + '"></td>';
+          h += totCell("data-ydstot") + "</tr>";
+          h += '<tr><th>SI</th>';
+          for (var x = start; x < end; x++) h += '<td><input class="si-in" data-i="' + x + '" type="number" min="1" max="18" value="' + (si[x] == null ? "" : si[x]) + '"></td>';
+          h += '<td class="hole-total"></td></tr>';
+        }
         h += "<tr><th>Par</th>";
         for (var j = start; j < end; j++) h += '<td><input class="par-in" data-i="' + j + '" type="number" min="3" max="6" value="' + (pars[j] || "") + '"></td>';
         h += totCell("data-partot") + "</tr>";
@@ -608,6 +636,12 @@
           h += '<tr><th>GIR</th>';
           for (var g = start; g < end; g++) h += '<td>' + flagSelect("gir-in", g, girs[g], false) + '</td>';
           h += totCell("data-girtot") + "</tr>";
+          h += '<tr><th>Pace</th>';
+          for (var c = start; c < end; c++) h += '<td><input class="pac-in" data-i="' + c + '" type="text" value="' + esc(pace[c] || "") + '" style="width:46px"></td>';
+          h += '<td class="hole-total"></td></tr>';
+          h += '<tr><th>Tot</th>';
+          for (var t = start; t < end; t++) h += '<td class="to-par" data-tot="' + t + '"></td>';
+          h += totCell("data-tottot") + "</tr>";
         }
         return "<table>" + h + "</table>";
       }
@@ -632,6 +666,15 @@
       });
       box.querySelectorAll(".gir-in").forEach(function (sel) {
         sel.onchange = function () { girs[Number(sel.dataset.i)] = sel.value === "" ? null : sel.value === "Y"; recalc(); };
+      });
+      box.querySelectorAll(".yds-in").forEach(function (inp) {
+        inp.oninput = function () { yards[Number(inp.dataset.i)] = inp.value === "" ? null : Number(inp.value); recalc(); };
+      });
+      box.querySelectorAll(".si-in").forEach(function (inp) {
+        inp.oninput = function () { si[Number(inp.dataset.i)] = inp.value === "" ? null : Number(inp.value); };
+      });
+      box.querySelectorAll(".pac-in").forEach(function (inp) {
+        inp.oninput = function () { pace[Number(inp.dataset.i)] = inp.value; };
       });
       recalc();
     }
@@ -672,6 +715,25 @@
           const s = Number(td.dataset.girtot); let hit = 0;
           for (var i = s; i < s + half; i++) if (girs[i] === true) hit++;
           td.textContent = hit || "";
+        });
+        box.querySelectorAll("[data-ydstot]").forEach(function (td) {
+          const s = Number(td.dataset.ydstot);
+          td.textContent = sumRange(yards, s, s + half) || "";
+        });
+        // Running to-par (the card's TOT row).
+        let running = 0;
+        box.querySelectorAll("[data-tot]").forEach(function (td) {
+          const i = Number(td.dataset.tot);
+          if (typeof scores[i] === "number" && typeof pars[i] === "number") {
+            running += scores[i] - pars[i];
+            td.textContent = toParStr(running);
+            td.className = "to-par " + toParClass(running);
+          } else { td.textContent = ""; td.className = "to-par"; }
+        });
+        box.querySelectorAll("[data-tottot]").forEach(function (td) {
+          const start = Number(td.dataset.tottot);
+          const sc = sumRange(scores, start, start + half), pr = sumRange(pars, start, start + half);
+          td.textContent = (sc && pr) ? toParStr(sc - pr) : "";
         });
       }
 
@@ -757,8 +819,19 @@
         fairways: detailed ? fairways : new Array(scores.length).fill(null),
         putts: detailed ? putts : new Array(scores.length).fill(null),
         girs: detailed ? girs : new Array(scores.length).fill(null),
+        yards: detailed ? yards : new Array(scores.length).fill(null),
+        si: detailed ? si : new Array(scores.length).fill(null),
+        pace: detailed ? pace : new Array(scores.length).fill(""),
         courseRating: $("#rf-rating").value,
         slopeRating: $("#rf-slope").value,
+        frontRating: $("#rf-frating").value,
+        frontSlope: $("#rf-fslope").value,
+        backRating: $("#rf-brating").value,
+        backSlope: $("#rf-bslope").value,
+        roundNo: $("#rf-roundno").value,
+        startHole: $("#rf-starthole").value,
+        scorer: $("#rf-scorer").value,
+        attest: $("#rf-attest").value,
         eventId: editing ? r.eventId : (presetEventId || null),
         stats: null,
         photo: photo,

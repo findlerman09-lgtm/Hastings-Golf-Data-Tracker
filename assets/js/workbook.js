@@ -66,8 +66,13 @@
     for (var h = 1; h <= 18; h++) header.push(h);
     header.push("Out", "In", "Tot", "+/-");
     const hbh = [header];
-    // Par reference (from first round with 18 pars, else standard)
+    // Course reference rows (yardage, stroke index) + par. Pull each from whatever
+    // round in the event actually recorded it (may be a 9-hole card).
     const parRef = (rounds.find(function (r) { return r.holes === 18; }) || {}).pars || Store.standardPars(18);
+    const ydsRef = rounds.find(function (r) { return r.yards && r.yards.some(function (v) { return v != null; }); });
+    const siRef = rounds.find(function (r) { return r.si && r.si.some(function (v) { return v != null; }); });
+    if (ydsRef) hbh.push(refRow("Yards", ydsRef.yards, true));
+    if (siRef) hbh.push(refRow("SI", siRef.si, false));
     hbh.push(rowWithTotals("Par", parRef, parRef));
 
     standings.forEach(function (row) {
@@ -78,6 +83,20 @@
     });
 
     return { Event: eventAOA, Leaderboard: lbAOA, "Hole-by-Hole": hbh };
+  }
+
+  // A reference row (yardage / stroke index): 18 values + optional Out/In/Tot sum.
+  function refRow(label, arr, withSum) {
+    const row = [label];
+    let out = 0, inn = 0;
+    for (var i = 0; i < 18; i++) {
+      const v = arr[i];
+      row.push(v == null ? "" : v);
+      if (withSum && typeof v === "number") { if (i < 9) out += v; else inn += v; }
+    }
+    if (withSum) row.push(out || "", inn || "", (out + inn) || "", "");
+    else row.push("", "", "", "");
+    return row;
   }
 
   function rowWithTotals(label, arr, pars) {

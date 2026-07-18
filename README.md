@@ -38,17 +38,24 @@ python3 -m http.server 8000
 - Recent rounds feed.
 
 ### Full scorecard tracking
-Each round captures the same data as a real scorecard, **per hole**:
+Each round captures **every category on a real scorecard**, per hole:
+- **Yardage** (YDS) and **stroke index** (SI)
 - **Par** and **gross score** (GRS)
 - **Fairways hit** (FWY) — auto-excluded on par 3s
 - **Putts** (PUT)
 - **Greens in regulation** (GIR)
+- **Pace** (PAC)
+- **Running score to par** (TOT) — computed live as you enter scores
 
 The app rolls these into fairway %, putts/round, and GIR % automatically (just
-like the 29% / 13 / 78% totals on a scorecard). Enter **course rating &
-slope** (e.g. Blue 70.1 / 124) and the tracker computes each player's handicap
-index. Per-hole tracking is optional — toggle *"Track fairways / putts / GIR"*
-off for a quick score-only entry.
+like the 29% / 13 / 78% totals on a scorecard), and shows the running to-par
+after every hole. Card metadata is captured too: **tee rating & slope**
+including **front/back splits** (e.g. Blue 70.1/124, F 34.6/121, B 35.5/127),
+**round #**, **starting hole**, and **scorer / attested-by**. Course rating &
+slope feed each player's handicap index.
+
+Per-hole detail is optional — toggle *"Full card"* off for a quick score-only
+entry.
 
 ### Add a round by photo (OCR)
 1. In **Log round**, click **Upload scorecard** and pick/take a photo.

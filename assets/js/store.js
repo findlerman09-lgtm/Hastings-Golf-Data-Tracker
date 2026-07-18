@@ -71,8 +71,19 @@
       if (!Array.isArray(r.putts)) r.putts = new Array(r.holes).fill(null);
       if (!Array.isArray(r.girs)) r.girs = new Array(r.holes).fill(null);
       if (!Array.isArray(r.yards)) r.yards = new Array(r.holes).fill(null);
+      if (!Array.isArray(r.si)) r.si = new Array(r.holes).fill(null);
+      if (!Array.isArray(r.pace)) r.pace = new Array(r.holes).fill("");
       if (r.courseRating === undefined) r.courseRating = null;
       if (r.slopeRating === undefined) r.slopeRating = null;
+      if (r.frontRating === undefined) r.frontRating = null;
+      if (r.frontSlope === undefined) r.frontSlope = null;
+      if (r.backRating === undefined) r.backRating = null;
+      if (r.backSlope === undefined) r.backSlope = null;
+      if (r.roundNo === undefined) r.roundNo = null;
+      if (r.startHole === undefined) r.startHole = null;
+      if (r.scorer === undefined) r.scorer = "";
+      if (r.attest === undefined) r.attest = "";
+      if (r.attestedAt === undefined) r.attestedAt = "";
       if (!r.stats) r.stats = null;
     });
     state.version = SCHEMA_VERSION;
@@ -156,8 +167,19 @@
       putts: normalizeArray(data.putts, holes, null),
       girs: normalizeBoolArray(data.girs, holes),
       yards: data.yards ? normalizeArray(data.yards, holes, null) : new Array(holes).fill(null),
+      si: normalizeArray(data.si, holes, null),
+      pace: normalizeStrArray(data.pace, holes),
       courseRating: numOrNull(data.courseRating),
       slopeRating: numOrNull(data.slopeRating),
+      frontRating: numOrNull(data.frontRating),
+      frontSlope: numOrNull(data.frontSlope),
+      backRating: numOrNull(data.backRating),
+      backSlope: numOrNull(data.backSlope),
+      roundNo: numOrNull(data.roundNo),
+      startHole: numOrNull(data.startHole),
+      scorer: (data.scorer || "").trim(),
+      attest: (data.attest || "").trim(),
+      attestedAt: data.attestedAt || "",
       stats: data.stats || null,
       photo: data.photo || null,
       notes: data.notes || "",
@@ -178,23 +200,40 @@
       r.putts = normalizeArray(r.putts, r.holes, null);
       r.girs = normalizeBoolArray(r.girs, r.holes);
       r.yards = normalizeArray(r.yards, r.holes, null);
+      r.si = normalizeArray(r.si, r.holes, null);
+      r.pace = normalizeStrArray(r.pace, r.holes);
     }
-    ["date", "course", "tee", "notes", "photo", "stats", "eventId"].forEach(function (k) {
+    ["date", "course", "tee", "notes", "photo", "stats", "eventId", "attestedAt"].forEach(function (k) {
       if (k in data) r[k] = data[k];
     });
-    if ("courseRating" in data) r.courseRating = numOrNull(data.courseRating);
-    if ("slopeRating" in data) r.slopeRating = numOrNull(data.slopeRating);
+    ["scorer", "attest"].forEach(function (k) {
+      if (k in data) r[k] = (data[k] || "").trim();
+    });
+    ["courseRating", "slopeRating", "frontRating", "frontSlope", "backRating", "backSlope", "roundNo", "startHole"].forEach(function (k) {
+      if (k in data) r[k] = numOrNull(data[k]);
+    });
     if (data.pars) r.pars = normalizeArray(data.pars, r.holes, r.pars);
     if (data.scores) r.scores = normalizeArray(data.scores, r.holes, r.scores);
     if (data.fairways) r.fairways = normalizeBoolArray(data.fairways, r.holes);
     if (data.putts) r.putts = normalizeArray(data.putts, r.holes, null);
     if (data.girs) r.girs = normalizeBoolArray(data.girs, r.holes);
     if (data.yards) r.yards = normalizeArray(data.yards, r.holes, null);
+    if (data.si) r.si = normalizeArray(data.si, r.holes, null);
+    if (data.pace) r.pace = normalizeStrArray(data.pace, r.holes);
     return r;
   }
 
   function numOrNull(v) {
     return v === null || v === undefined || v === "" || isNaN(Number(v)) ? null : Number(v);
+  }
+
+  // Normalize an array of free-text values (e.g. per-hole pace) to fixed length.
+  function normalizeStrArray(arr, len) {
+    const out = new Array(len).fill("");
+    if (Array.isArray(arr)) {
+      for (var i = 0; i < len; i++) out[i] = arr[i] == null ? "" : String(arr[i]);
+    }
+    return out;
   }
 
   // Normalize an array of fairway/GIR flags to true / false / null (untracked or N/A).
