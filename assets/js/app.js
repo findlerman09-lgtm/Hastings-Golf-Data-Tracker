@@ -378,6 +378,7 @@
       statCard(fmt(s.scoringAvg18), "Scoring avg (18)") +
       statCard(s.avgToPar18 != null ? toParStr(Math.round(s.avgToPar18)) : "—", "Avg to par") +
       statCard(s.best != null ? toParStr(s.best) : "—", "Best (to par)") +
+      statCard(s.handicapIndex != null ? fmt(s.handicapIndex) : "—", "Handicap index") +
       statCard(s.rounds, "Rounds played");
     wrap.appendChild(stats);
 
@@ -503,6 +504,9 @@
           date: new Date().toISOString().slice(0, 10),
           course: "", tee: "", holes: 18,
           pars: Store.standardPars(18), scores: new Array(18).fill(null),
+          fairways: new Array(18).fill(null), putts: new Array(18).fill(null),
+          girs: new Array(18).fill(null),
+          courseRating: null, slopeRating: null,
           stats: null, photo: null, notes: "",
         };
 
@@ -526,60 +530,101 @@
       '<div class="field"><label>Tees</label><input id="rf-tee" value="' + esc(r.tee) + '" placeholder="e.g. Blue"></div>' +
       '<div class="field"><label>Holes</label><select id="rf-holes"><option value="18"' + (r.holes === 18 ? " selected" : "") + '>18</option><option value="9"' + (r.holes === 9 ? " selected" : "") + '>9</option></select></div>' +
       '</div>' +
-      '<label>Scorecard <span class="help">Enter par + strokes for each hole. Totals update live.</span></label>' +
+      '<div class="form-row">' +
+      '<div class="field"><label>Course rating <span class="help">for handicap</span></label><input type="number" step="0.1" id="rf-rating" value="' + (r.courseRating != null ? r.courseRating : "") + '" placeholder="e.g. 70.1"></div>' +
+      '<div class="field"><label>Slope rating</label><input type="number" id="rf-slope" value="' + (r.slopeRating != null ? r.slopeRating : "") + '" placeholder="e.g. 124"></div>' +
+      '</div>' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">' +
+      '<label style="margin:0">Scorecard <span class="help">Par + strokes per hole; totals update live.</span></label>' +
+      '<label style="display:flex;align-items:center;gap:6px;margin:0;cursor:pointer"><input type="checkbox" id="rf-detailed" style="width:auto"> Track fairways / putts / GIR</label>' +
+      '</div>' +
       '<div id="rf-scorecard" class="scorecard"></div>' +
       '<hr class="divider">' +
-      '<details><summary style="cursor:pointer;font-weight:600;color:var(--muted)">Advanced stats (optional)</summary>' +
-      '<div class="form-row" style="margin-top:12px">' +
-      '<div class="field"><label>Fairways hit</label><input type="number" id="rf-fw" min="0" value="' + (r.stats && r.stats.fairways != null ? r.stats.fairways : "") + '"></div>' +
-      '<div class="field"><label>Fairways possible</label><input type="number" id="rf-fwp" min="0" value="' + (r.stats && r.stats.fairwaysPossible != null ? r.stats.fairwaysPossible : "") + '"></div>' +
-      '<div class="field"><label>Greens in reg</label><input type="number" id="rf-gir" min="0" value="' + (r.stats && r.stats.gir != null ? r.stats.gir : "") + '"></div>' +
-      '<div class="field"><label>Total putts</label><input type="number" id="rf-putts" min="0" value="' + (r.stats && r.stats.putts != null ? r.stats.putts : "") + '"></div>' +
-      '</div></details>' +
-      '<div class="field" style="margin-top:12px"><label>Notes</label><textarea id="rf-notes" rows="2">' + esc(r.notes) + '</textarea></div>' +
+      '<div class="field" style="margin-top:4px"><label>Notes</label><textarea id="rf-notes" rows="2">' + esc(r.notes) + '</textarea></div>' +
       '<div class="btn-row" style="justify-content:space-between">' +
       (editing ? '<button class="btn-danger" id="rf-del">Delete round</button>' : '<span></span>') +
       '<div class="btn-row"><button id="rf-cancel">Cancel</button><button class="btn-primary" id="rf-save">Save round</button></div></div>';
 
     openModal(editing ? "Edit round" : "Log round", form, { wide: true });
 
-    // Local working copy of pars/scores.
+    // Local working copies of every per-hole array.
     let pars = r.pars.slice();
     let scores = r.scores.slice();
+    let fairways = (r.fairways || []).slice();
+    let putts = (r.putts || []).slice();
+    let girs = (r.girs || []).slice();
     let photo = r.photo;
+    let detailed = (r.fairways || []).some(function (v) { return v !== null; }) ||
+      (r.putts || []).some(function (v) { return v != null; }) ||
+      (r.girs || []).some(function (v) { return v !== null; });
+
+    function fit(arr, holes, fill) {
+      if (arr.length !== holes) { const a = new Array(holes).fill(fill); for (var i = 0; i < Math.min(arr.length, holes); i++) a[i] = arr[i]; return a; }
+      return arr;
+    }
+
+    function flagSelect(cls, i, val, disabled) {
+      return '<select class="' + cls + '" data-i="' + i + '"' + (disabled ? " disabled" : "") + '>' +
+        '<option value=""' + (val == null ? " selected" : "") + '>·</option>' +
+        '<option value="Y"' + (val === true ? " selected" : "") + '>Y</option>' +
+        '<option value="N"' + (val === false ? " selected" : "") + '>N</option></select>';
+    }
 
     function buildScorecard() {
       const holes = Number($("#rf-holes").value);
-      if (pars.length !== holes) { pars = Store.standardPars(holes); }
-      if (scores.length !== holes) { scores = new Array(holes).fill(null); }
+      pars = fit(pars, holes, null); if (pars.every(function (p) { return p == null; })) pars = Store.standardPars(holes);
+      scores = fit(scores, holes, null);
+      fairways = fit(fairways, holes, null);
+      putts = fit(putts, holes, null);
+      girs = fit(girs, holes, null);
       const box = $("#rf-scorecard");
-      const nums = [];
-      for (var i = 1; i <= holes; i++) nums.push(i);
       const half = holes === 18 ? 9 : holes;
 
       function seg(start, end) {
+        function totCell(attr) { return '<td class="hole-total" ' + attr + '="' + start + '"></td>'; }
         let h = "<tr><th>Hole</th>";
         for (var i = start; i < end; i++) h += "<th>" + (i + 1) + "</th>";
         h += '<th class="hole-total">' + (holes === 18 ? (start === 0 ? "Out" : "In") : "Tot") + "</th></tr>";
         h += "<tr><th>Par</th>";
         for (var j = start; j < end; j++) h += '<td><input class="par-in" data-i="' + j + '" type="number" min="3" max="6" value="' + (pars[j] || "") + '"></td>';
-        h += '<td class="hole-total" data-partot="' + start + '"></td></tr>';
+        h += totCell("data-partot") + "</tr>";
         h += "<tr><th>Score</th>";
         for (var k = start; k < end; k++) h += '<td><input class="sc-in" data-i="' + k + '" type="number" min="1" max="15" value="' + (scores[k] == null ? "" : scores[k]) + '"></td>';
-        h += '<td class="hole-total" data-sctot="' + start + '"></td></tr>';
+        h += totCell("data-sctot") + "</tr>";
+        if (detailed) {
+          h += '<tr><th>Fwy</th>';
+          for (var f = start; f < end; f++) h += '<td>' + flagSelect("fwy-in", f, fairways[f], pars[f] === 3) + '</td>';
+          h += totCell("data-fwytot") + "</tr>";
+          h += '<tr><th>Putt</th>';
+          for (var p = start; p < end; p++) h += '<td><input class="put-in" data-i="' + p + '" type="number" min="0" max="9" value="' + (putts[p] == null ? "" : putts[p]) + '"></td>';
+          h += totCell("data-puttot") + "</tr>";
+          h += '<tr><th>GIR</th>';
+          for (var g = start; g < end; g++) h += '<td>' + flagSelect("gir-in", g, girs[g], false) + '</td>';
+          h += totCell("data-girtot") + "</tr>";
+        }
         return "<table>" + h + "</table>";
       }
 
       let html = seg(0, half);
       if (holes === 18) html += '<div style="height:8px"></div>' + seg(9, 18);
-      html += '<p style="margin-top:8px;font-weight:700">Total: <span id="rf-total">—</span> &nbsp; Par: <span id="rf-par">—</span> &nbsp; <span id="rf-topar" class="to-par"></span></p>';
+      html += '<p style="margin-top:8px;font-weight:700">Total: <span id="rf-total">—</span> &nbsp; Par: <span id="rf-par">—</span> &nbsp; <span id="rf-topar" class="to-par"></span>' +
+        (detailed ? ' &nbsp;<span class="muted" style="font-weight:600;font-size:.85rem" id="rf-detail-sum"></span>' : '') + '</p>';
       box.innerHTML = html;
 
       box.querySelectorAll(".par-in").forEach(function (inp) {
-        inp.oninput = function () { pars[Number(inp.dataset.i)] = inp.value === "" ? 0 : Number(inp.value); recalc(); };
+        inp.oninput = function () { pars[Number(inp.dataset.i)] = inp.value === "" ? null : Number(inp.value); recalc(); };
       });
       box.querySelectorAll(".sc-in").forEach(function (inp) {
         inp.oninput = function () { scores[Number(inp.dataset.i)] = inp.value === "" ? null : Number(inp.value); recalc(); };
+      });
+      box.querySelectorAll(".fwy-in").forEach(function (sel) {
+        sel.onchange = function () { fairways[Number(sel.dataset.i)] = sel.value === "" ? null : sel.value === "Y"; recalc(); };
+      });
+      box.querySelectorAll(".put-in").forEach(function (inp) {
+        inp.oninput = function () { putts[Number(inp.dataset.i)] = inp.value === "" ? null : Number(inp.value); recalc(); };
+      });
+      box.querySelectorAll(".gir-in").forEach(function (sel) {
+        sel.onchange = function () { girs[Number(sel.dataset.i)] = sel.value === "" ? null : sel.value === "Y"; recalc(); };
       });
       recalc();
     }
@@ -587,29 +632,65 @@
     function recalc() {
       const holes = Number($("#rf-holes").value);
       const half = holes === 18 ? 9 : holes;
-      function sumRange(arr, a, b) {
-        let s = 0; for (var i = a; i < b; i++) s += Number(arr[i]) || 0; return s;
-      }
       const box = $("#rf-scorecard");
+      function sumRange(arr, a, b) { let s = 0; for (var i = a; i < b; i++) s += Number(arr[i]) || 0; return s; }
+
       box.querySelectorAll("[data-partot]").forEach(function (td) {
         const start = Number(td.dataset.partot);
-        td.textContent = sumRange(pars, start, start + half);
+        td.textContent = sumRange(pars, start, start + half) || "";
       });
       box.querySelectorAll("[data-sctot]").forEach(function (td) {
         const start = Number(td.dataset.sctot);
-        const v = sumRange(scores, start, start + half);
-        td.textContent = v || "";
+        td.textContent = sumRange(scores, start, start + half) || "";
       });
+
+      if (detailed) {
+        // Par-3 holes can't record a fairway — reflect that in the UI.
+        box.querySelectorAll(".fwy-in").forEach(function (sel) {
+          const i = Number(sel.dataset.i);
+          const par3 = pars[i] === 3;
+          sel.disabled = par3;
+          if (par3) { sel.value = ""; fairways[i] = null; }
+        });
+        box.querySelectorAll("[data-fwytot]").forEach(function (td) {
+          const s = Number(td.dataset.fwytot); let hit = 0, poss = 0;
+          for (var i = s; i < s + half; i++) { if (fairways[i] === true) { hit++; poss++; } else if (fairways[i] === false) poss++; }
+          td.textContent = poss ? hit + "/" + poss : "";
+        });
+        box.querySelectorAll("[data-puttot]").forEach(function (td) {
+          const s = Number(td.dataset.puttot);
+          td.textContent = sumRange(putts, s, s + half) || "";
+        });
+        box.querySelectorAll("[data-girtot]").forEach(function (td) {
+          const s = Number(td.dataset.girtot); let hit = 0;
+          for (var i = s; i < s + half; i++) if (girs[i] === true) hit++;
+          td.textContent = hit || "";
+        });
+      }
+
       const totScore = sumRange(scores, 0, holes);
       const totPar = sumRange(pars, 0, holes);
       $("#rf-total").textContent = totScore || "—";
       $("#rf-par").textContent = totPar || "—";
       const tp = totScore - totPar;
       const el = $("#rf-topar");
-      if (totScore && totPar) {
-        el.textContent = toParStr(tp);
-        el.className = "to-par " + toParClass(tp);
-      } else { el.textContent = ""; }
+      if (totScore && totPar) { el.textContent = toParStr(tp); el.className = "to-par " + toParClass(tp); }
+      else { el.textContent = ""; }
+
+      const ds = $("#rf-detail-sum");
+      if (detailed && ds) {
+        let fwHit = 0, fwPoss = 0, girHit = 0, girPoss = 0;
+        for (var i = 0; i < holes; i++) {
+          if (fairways[i] === true) { fwHit++; fwPoss++; } else if (fairways[i] === false) fwPoss++;
+          if (girs[i] === true) { girHit++; girPoss++; } else if (girs[i] === false) girPoss++;
+        }
+        const pT = sumRange(putts, 0, holes);
+        const parts = [];
+        if (fwPoss) parts.push("Fwy " + Math.round((fwHit / fwPoss) * 100) + "%");
+        if (pT) parts.push("Putts " + pT);
+        if (girPoss) parts.push("GIR " + Math.round((girHit / girPoss) * 100) + "%");
+        ds.textContent = parts.length ? "· " + parts.join(" · ") : "";
+      }
     }
 
     function renderPhotoArea(dataURL, statusHTML) {
@@ -651,21 +732,14 @@
     };
 
     $("#rf-holes").onchange = buildScorecard;
+    const detailChk = $("#rf-detailed");
+    detailChk.checked = detailed;
+    detailChk.onchange = function () { detailed = detailChk.checked; buildScorecard(); };
     buildScorecard();
     if (photo) renderPhotoArea(photo, "");
 
     $("#rf-cancel").onclick = closeModal;
     $("#rf-save").onclick = function () {
-      const fw = $("#rf-fw").value, fwp = $("#rf-fwp").value, gir = $("#rf-gir").value, putts = $("#rf-putts").value;
-      let advStats = null;
-      if (fw !== "" || fwp !== "" || gir !== "" || putts !== "") {
-        advStats = {
-          fairways: fw === "" ? null : Number(fw),
-          fairwaysPossible: fwp === "" ? null : Number(fwp),
-          gir: gir === "" ? null : Number(gir),
-          putts: putts === "" ? null : Number(putts),
-        };
-      }
       const data = {
         playerId: $("#rf-player").value,
         date: $("#rf-date").value,
@@ -673,7 +747,13 @@
         tee: $("#rf-tee").value.trim(),
         holes: Number($("#rf-holes").value),
         pars: pars, scores: scores,
-        stats: advStats, photo: photo,
+        fairways: detailed ? fairways : new Array(scores.length).fill(null),
+        putts: detailed ? putts : new Array(scores.length).fill(null),
+        girs: detailed ? girs : new Array(scores.length).fill(null),
+        courseRating: $("#rf-rating").value,
+        slopeRating: $("#rf-slope").value,
+        stats: null,
+        photo: photo,
         notes: $("#rf-notes").value.trim(),
       };
       if (editing) Store.updateRound(state, roundId, data);

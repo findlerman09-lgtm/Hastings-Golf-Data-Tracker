@@ -51,11 +51,38 @@
     return sum(nums) / nums.length;
   }
 
+  function hasFlags(arr) {
+    return Array.isArray(arr) && arr.some(function (v) { return v === true || v === false; });
+  }
+  function hasNums(arr) {
+    return Array.isArray(arr) && arr.some(function (v) { return typeof v === "number"; });
+  }
+
+  // USGA-style score differential for an 18-hole round with course rating & slope.
+  function differential(round) {
+    if (round.holes !== 18 || !isComplete(round)) return null;
+    if (!round.courseRating || !round.slopeRating) return null;
+    return ((roundTotal(round) - round.courseRating) * 113) / round.slopeRating;
+  }
+
+  // Simplified handicap index: average of the lowest ~40% of differentials × 0.96.
+  function handicapIndex(rounds) {
+    const diffs = rounds
+      .map(differential)
+      .filter(function (d) { return d !== null; })
+      .sort(function (a, b) { return a - b; });
+    if (!diffs.length) return null;
+    const k = Math.max(1, Math.round(diffs.length * 0.4));
+    const best = diffs.slice(0, k);
+    return (sum(best) / best.length) * 0.96;
+  }
+
   function playerStats(state, playerId) {
     const rounds = roundsFor(state, playerId);
     if (!rounds.length) {
       return {
         rounds: 0,
+        handicapIndex: null,
         scoringAvg18: null,
         avgToPar18: null,
         best: null,
@@ -87,20 +114,36 @@
       if (prev.length) recentTrend = avg(last3) - avg(prev);
     }
 
-    // Advanced stats aggregated across rounds that recorded them.
-    let fairwaysHit = 0, fairwaysPoss = 0, girHit = 0, girPoss = 0, putts = [], hadAdv = 0;
+    // Advanced stats: prefer per-hole detail (like a real scorecard), else fall
+    // back to any round-level totals from a simpler/imported entry.
+    let fairwaysHit = 0, fairwaysPoss = 0, girHit = 0, girPoss = 0, putts = [];
     rounds.forEach(function (r) {
-      if (r.stats) {
-        hadAdv++;
+      if (hasFlags(r.fairways)) {
+        r.fairways.forEach(function (v) {
+          if (v === true) { fairwaysHit++; fairwaysPoss++; }
+          else if (v === false) { fairwaysPoss++; }
+        });
+      } else if (r.stats) {
         fairwaysHit += Number(r.stats.fairways) || 0;
         fairwaysPoss += Number(r.stats.fairwaysPossible) || 0;
+      }
+      if (hasFlags(r.girs)) {
+        r.girs.forEach(function (v) {
+          if (v !== null) { girPoss++; if (v === true) girHit++; }
+        });
+      } else if (r.stats) {
         girHit += Number(r.stats.gir) || 0;
         girPoss += r.holes;
-        if (r.stats.putts) putts.push(Number(r.stats.putts));
+      }
+      if (hasNums(r.putts)) {
+        putts.push(sum(r.putts.map(function (p) { return Number(p) || 0; })));
+      } else if (r.stats && r.stats.putts) {
+        putts.push(Number(r.stats.putts));
       }
     });
 
     return {
+      handicapIndex: handicapIndex(rounds),
       rounds: rounds.length,
       scoringAvg18: avg(totals18),
       avgToPar18: avg(topars),
@@ -160,6 +203,8 @@
     total18: total18,
     toPar18: toPar18,
     roundsFor: roundsFor,
+    differential: differential,
+    handicapIndex: handicapIndex,
     playerStats: playerStats,
     leaderboard: leaderboard,
     teamStats: teamStats,

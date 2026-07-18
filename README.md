@@ -34,8 +34,21 @@ python3 -m http.server 8000
   normalized to 18 for fair comparison).
 - **Team scoring trend** chart over the season.
 - Per-player detail pages with best round, average-to-par, recent-form trend,
-  and optional fairways / greens-in-regulation / putts stats.
+  and a **handicap index** (USGA-style, from course rating & slope).
 - Recent rounds feed.
+
+### Full scorecard tracking
+Each round captures the same data as a real scorecard, **per hole**:
+- **Par** and **gross score** (GRS)
+- **Fairways hit** (FWY) — auto-excluded on par 3s
+- **Putts** (PUT)
+- **Greens in regulation** (GIR)
+
+The app rolls these into fairway %, putts/round, and GIR % automatically (just
+like the 29% / 13 / 78% totals on a scorecard). Enter **course rating &
+slope** (e.g. Blue 70.1 / 124) and the tracker computes each player's handicap
+index. Per-hole tracking is optional — toggle *"Track fairways / putts / GIR"*
+off for a quick score-only entry.
 
 ### Add a round by photo (OCR)
 1. In **Log round**, click **Upload scorecard** and pick/take a photo.
@@ -94,9 +107,14 @@ as-is.)
     {
       "id": "...", "playerId": "...", "date": "2026-04-05",
       "course": "Hastings Muni", "tee": "White", "holes": 18,
-      "pars":   [4,4,4,3,5, ...],
-      "scores": [5,4,6,3,5, ...],
-      "stats":  { "fairways": 9, "fairwaysPossible": 14, "gir": 11, "putts": 31 },
+      "pars":     [4,4,4,3,5, ...],
+      "scores":   [5,4,6,3,5, ...],
+      "fairways": [false,false,true,null,true, ...],  // null = par 3 / not tracked
+      "putts":    [2,1,2,1,2, ...],
+      "girs":     [false,true,true,true,true, ...],
+      "yards":    [388,467,346,161,373, ...],
+      "courseRating": 70.1,
+      "slopeRating": 124,
       "photo": null
     }
   ]

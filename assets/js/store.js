@@ -62,8 +62,14 @@
     if (!Array.isArray(state.rounds)) state.rounds = [];
     if (!state.team) state.team = { name: "Hastings Golf", season: "", coach: "" };
     state.rounds.forEach(function (r) {
-      if (!Array.isArray(r.pars)) r.pars = standardPars(r.holes || 18);
       if (typeof r.holes !== "number") r.holes = r.scores ? r.scores.length : 18;
+      if (!Array.isArray(r.pars)) r.pars = standardPars(r.holes || 18);
+      if (!Array.isArray(r.fairways)) r.fairways = new Array(r.holes).fill(null);
+      if (!Array.isArray(r.putts)) r.putts = new Array(r.holes).fill(null);
+      if (!Array.isArray(r.girs)) r.girs = new Array(r.holes).fill(null);
+      if (!Array.isArray(r.yards)) r.yards = new Array(r.holes).fill(null);
+      if (r.courseRating === undefined) r.courseRating = null;
+      if (r.slopeRating === undefined) r.slopeRating = null;
       if (!r.stats) r.stats = null;
     });
     state.version = SCHEMA_VERSION;
@@ -108,6 +114,13 @@
       holes: holes,
       pars: normalizeArray(data.pars, holes, standardPars(holes)),
       scores: normalizeArray(data.scores, holes, null),
+      // Per-hole detail (matches a real scorecard). null = not tracked / N/A.
+      fairways: normalizeBoolArray(data.fairways, holes),
+      putts: normalizeArray(data.putts, holes, null),
+      girs: normalizeBoolArray(data.girs, holes),
+      yards: data.yards ? normalizeArray(data.yards, holes, null) : new Array(holes).fill(null),
+      courseRating: numOrNull(data.courseRating),
+      slopeRating: numOrNull(data.slopeRating),
       stats: data.stats || null,
       photo: data.photo || null,
       notes: data.notes || "",
@@ -124,13 +137,41 @@
       r.holes = data.holes === 9 ? 9 : 18;
       r.pars = normalizeArray(r.pars, r.holes, standardPars(r.holes));
       r.scores = normalizeArray(r.scores, r.holes, null);
+      r.fairways = normalizeBoolArray(r.fairways, r.holes);
+      r.putts = normalizeArray(r.putts, r.holes, null);
+      r.girs = normalizeBoolArray(r.girs, r.holes);
+      r.yards = normalizeArray(r.yards, r.holes, null);
     }
     ["date", "course", "tee", "notes", "photo", "stats"].forEach(function (k) {
       if (k in data) r[k] = data[k];
     });
+    if ("courseRating" in data) r.courseRating = numOrNull(data.courseRating);
+    if ("slopeRating" in data) r.slopeRating = numOrNull(data.slopeRating);
     if (data.pars) r.pars = normalizeArray(data.pars, r.holes, r.pars);
     if (data.scores) r.scores = normalizeArray(data.scores, r.holes, r.scores);
+    if (data.fairways) r.fairways = normalizeBoolArray(data.fairways, r.holes);
+    if (data.putts) r.putts = normalizeArray(data.putts, r.holes, null);
+    if (data.girs) r.girs = normalizeBoolArray(data.girs, r.holes);
+    if (data.yards) r.yards = normalizeArray(data.yards, r.holes, null);
     return r;
+  }
+
+  function numOrNull(v) {
+    return v === null || v === undefined || v === "" || isNaN(Number(v)) ? null : Number(v);
+  }
+
+  // Normalize an array of fairway/GIR flags to true / false / null (untracked or N/A).
+  function normalizeBoolArray(arr, len) {
+    const out = new Array(len).fill(null);
+    if (Array.isArray(arr)) {
+      for (var i = 0; i < len; i++) {
+        var v = arr[i];
+        if (v === true || v === "Y" || v === "y" || v === 1) out[i] = true;
+        else if (v === false || v === "N" || v === "n" || v === 0) out[i] = false;
+        else out[i] = null;
+      }
+    }
+    return out;
   }
 
   function deleteRound(state, id) {

@@ -145,7 +145,10 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .scorecard { overflow-x: auto; }
 .scorecard table { min-width: 620px; }
 .scorecard input { width: 44px; text-align: center; padding: 6px 2px; }
+.scorecard select { width: 46px; text-align: center; padding: 6px 1px; }
+.scorecard select:disabled { opacity: .4; }
 .scorecard th, .scorecard td { text-align: center; padding: 5px 4px; }
+.scorecard th:first-child { text-align: left; white-space: nowrap; }
 .hole-total { font-weight: 800; background: var(--surface-2); }
 
 /* Chart */
