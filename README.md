@@ -1,0 +1,123 @@
+# ⛳ Hastings Golf Data Tracker
+
+A next-level golf stats tracker for a **team and coach** — built as a
+zero-backend static site so it runs for free on **GitHub Pages**.
+
+- **Coach app** (`index.html`) — full roster + round management, live scorecards,
+  scoring trends, leaderboards, and advanced stats.
+- **Photo entry** — snap or upload a scorecard photo and the app reads the
+  numbers for you with in-browser OCR (no API keys, nothing leaves the device).
+- **Backup & publish** — export your data as JSON for safekeeping or to move
+  between devices, and publish a lightweight `data.json` that powers a
+  **public read-only dashboard** (`public.html`) anyone can view.
+
+Everything runs client-side. Your data lives in your browser (localStorage)
+until you choose to export or publish it.
+
+---
+
+## Quick start
+
+Open `index.html` in a browser (or serve the folder) and start adding players.
+To run locally with the OCR feature working, serve over HTTP rather than
+`file://`:
+
+```bash
+python3 -m http.server 8000
+# then visit http://localhost:8000/
+```
+
+## Features
+
+### Team & coach dashboard
+- **Leaderboard** ranked by 18-hole scoring average (9-hole rounds are
+  normalized to 18 for fair comparison).
+- **Team scoring trend** chart over the season.
+- Per-player detail pages with best round, average-to-par, recent-form trend,
+  and optional fairways / greens-in-regulation / putts stats.
+- Recent rounds feed.
+
+### Add a round by photo (OCR)
+1. In **Log round**, click **Upload scorecard** and pick/take a photo.
+2. The image is downscaled and [Tesseract.js](https://tesseract.projectnaptha.com/)
+   reads it in your browser, pre-filling the hole scores.
+3. **Review and correct** the detected numbers — OCR of hand-marked cards is
+   never perfect — then save. The photo is stored with the round for reference.
+
+> OCR needs an internet connection the first time (to load the library from a
+> CDN). If it can't load, the photo is still saved and you can enter scores
+> manually.
+
+### Backup & publish
+
+Open the **Backup & Publish** tab:
+
+- **Full backup** — downloads everything (including photos). Use it to move
+  data to another device (**Import / restore** supports *replace* or *merge*).
+- **Publish** — downloads a slim `data.json` (stats & scores, no photos) to
+  commit into your repo so the public dashboard shows current team stats.
+
+---
+
+## Publishing to your public GitHub page
+
+1. In the app, go to **Backup & Publish → Export data.json for publishing**.
+2. Commit the downloaded file to this repo at **`data/data.json`** (replace the
+   sample that ships here).
+3. Enable GitHub Pages:
+   - **Settings → Pages → Build and deployment**.
+   - Either use **GitHub Actions** (the included
+     [`.github/workflows/pages.yml`](.github/workflows/pages.yml) deploys on
+     every push to `main`), or **Deploy from a branch** → `main` / root.
+4. Share your public URL:
+   - Coach app: `https://<user>.github.io/<repo>/`
+   - Public stats: `https://<user>.github.io/<repo>/public.html`
+
+Re-export and re-commit `data.json` whenever you want to refresh the public
+numbers. (A `.nojekyll` file is included so GitHub Pages serves the assets
+as-is.)
+
+---
+
+## Data model
+
+`data/data.json` (and every export) has this shape:
+
+```jsonc
+{
+  "version": 2,
+  "team": { "name": "Hastings Golf", "season": "Spring 2026", "coach": "..." },
+  "players": [
+    { "id": "...", "name": "Alex Morgan", "classYear": "2026", "squad": "Varsity" }
+  ],
+  "rounds": [
+    {
+      "id": "...", "playerId": "...", "date": "2026-04-05",
+      "course": "Hastings Muni", "tee": "White", "holes": 18,
+      "pars":   [4,4,4,3,5, ...],
+      "scores": [5,4,6,3,5, ...],
+      "stats":  { "fairways": 9, "fairwaysPossible": 14, "gir": 11, "putts": 31 },
+      "photo": null
+    }
+  ]
+}
+```
+
+## Project layout
+
+```
+index.html          Coach app
+public.html         Read-only public dashboard
+data/data.json      Published team data (commit your export here)
+assets/css/app.css  Styles (light + dark)
+assets/js/
+  store.js          Data model, persistence, import/export
+  stats.js          Derived golf statistics
+  charts.js         Dependency-free SVG charts
+  ocr.js            Photo downscaling + Tesseract.js OCR
+  app.js            Coach app UI
+  public.js         Public dashboard UI
+.github/workflows/pages.yml   Optional GitHub Pages deploy
+```
+
+No build step, no npm install — plain HTML/CSS/JS.

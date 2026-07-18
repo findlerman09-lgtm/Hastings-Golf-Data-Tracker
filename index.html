@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hastings Golf Data Tracker</title>
+  <meta name="description" content="Team and coach golf stats tracker with scorecard photo entry, backup, and a public dashboard.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9B%B3%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="logo">⛳</span>
+        <span><span id="brand-name">Hastings Golf</span> Data Tracker<small>Team &amp; coach dashboard</small></span>
+      </div>
+      <span class="spacer"></span>
+      <button id="theme-toggle" class="btn-sm" title="Toggle light/dark">🌗</button>
+    </div>
+    <nav class="tabs">
+      <button class="tab active" data-tab="dashboard">Dashboard</button>
+      <button class="tab" data-tab="roster">Roster</button>
+      <button class="tab" data-tab="rounds">Rounds</button>
+      <button class="tab" data-tab="data">Backup &amp; Publish</button>
+    </nav>
+  </header>
+
+  <main id="app"><!-- rendered by app.js --></main>
+
+  <footer class="site">
+    Hastings Golf Data Tracker · data stays in your browser until you export it ·
+    <a href="public.html">public view</a>
+  </footer>
+
+  <script src="assets/js/store.js"></script>
+  <script src="assets/js/stats.js"></script>
+  <script src="assets/js/charts.js"></script>
+  <script src="assets/js/ocr.js"></script>
+  <script src="assets/js/app.js"></script>
+</body>
+</html>
