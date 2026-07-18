@@ -84,6 +84,7 @@
       if (r.scorer === undefined) r.scorer = "";
       if (r.attest === undefined) r.attest = "";
       if (r.attestedAt === undefined) r.attestedAt = "";
+      if (r.fullCard === undefined) r.fullCard = false;
       if (!r.stats) r.stats = null;
     });
     state.version = SCHEMA_VERSION;
@@ -180,6 +181,7 @@
       scorer: (data.scorer || "").trim(),
       attest: (data.attest || "").trim(),
       attestedAt: data.attestedAt || "",
+      fullCard: !!data.fullCard,
       stats: data.stats || null,
       photo: data.photo || null,
       notes: data.notes || "",
@@ -209,6 +211,7 @@
     ["scorer", "attest"].forEach(function (k) {
       if (k in data) r[k] = (data[k] || "").trim();
     });
+    if ("fullCard" in data) r.fullCard = !!data.fullCard;
     ["courseRating", "slopeRating", "frontRating", "frontSlope", "backRating", "backSlope", "roundNo", "startHole"].forEach(function (k) {
       if (k in data) r[k] = numOrNull(data[k]);
     });

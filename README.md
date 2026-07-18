@@ -60,9 +60,12 @@ entry.
 ### Add a round by photo (OCR)
 1. In **Log round**, click **Upload scorecard** and pick/take a photo.
 2. The image is downscaled and [Tesseract.js](https://tesseract.projectnaptha.com/)
-   reads it in your browser, pre-filling the hole scores.
-3. **Review and correct** the detected numbers — OCR of hand-marked cards is
-   never perfect — then save. The photo is stored with the round for reference.
+   reads it in your browser. It reconstructs the scorecard table by position and
+   reads **the whole card** — scores plus **par, yardage, stroke index,
+   fairways, putts, GIR, and pace** — pre-filling every row (the round switches
+   to full-card view automatically).
+3. **Review and correct** the detected values — OCR of a scorecard is never
+   perfect — then save. The photo is stored with the round for reference.
 
 > OCR needs an internet connection the first time (to load the library from a
 > CDN). If it can't load, the photo is still saved and you can enter scores
@@ -79,11 +82,17 @@ one event = ~15 screenshots:
 2. Drop **all** the event's screenshots at once.
 3. Tag each image:
    - **Scorecard** → pick the player and whether it's their **front nine**,
-     **back nine**, or **full 18**. Browser OCR reads the hole scores.
+     **back nine**, or **full 18**. Browser OCR reads the full card (scores,
+     par, fairways, putts, GIR, yardage, SI, pace).
    - **Leaderboard** / **Event info** → kept for reference.
 4. The app **stitches each player's front + back nine into one 18-hole round**
    and creates the event. Review the standings and fix any OCR misreads in the
    normal round editor.
+
+Leave **"Import as full round"** checked (the default) and each imported round
+opens with the full-card grid already on, so the Putt / Fairway / GIR / Yardage
+/ SI / Pace rows are ready to fill in while you review — no need to toggle
+"Full card" on every round.
 
 ### Per-event workbook export
 From any event, **⬇ Workbook** downloads a multi-sheet spreadsheet:
