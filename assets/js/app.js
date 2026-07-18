@@ -783,13 +783,30 @@
           if (bar) bar.style.width = pct + "%";
         });
       }).then(function (parsed) {
-        if (parsed && parsed.scores.length) {
-          parsed.scores.forEach(function (v, i) { if (i < scores.length) scores[i] = v; });
+        function applyNums(target, src) { if (src) src.forEach(function (v, i) { if (i < target.length && v != null) target[i] = v; }); }
+        function applyFlags(target, src) { if (src) src.forEach(function (v, i) { if (i < target.length && v !== null) target[i] = v; }); }
+        const scoreCount = (parsed.scores || []).filter(function (v) { return v != null; }).length;
+        applyNums(scores, parsed.scores);
+        if (parsed.detailedFound) {
+          applyNums(pars, parsed.pars);
+          applyNums(putts, parsed.putts);
+          applyNums(si, parsed.si);
+          applyNums(yards, parsed.yards);
+          applyFlags(fairways, parsed.fairways);
+          applyFlags(girs, parsed.girs);
+          if (parsed.pace) parsed.pace.forEach(function (v, i) { if (i < pace.length && v) pace[i] = v; });
+          detailed = true; detailChk.checked = true;
+        }
+        if (scoreCount) {
           buildScorecard();
+          const cats = [];
+          [["pars", "par"], ["fairways", "fairways"], ["putts", "putts"], ["girs", "GIR"], ["yards", "yardage"], ["si", "SI"]].forEach(function (p) {
+            if (parsed[p[0]] && parsed[p[0]].some(function (v) { return v !== null; })) cats.push(p[1]);
+          });
+          if (parsed.pace && parsed.pace.some(function (v) { return v; })) cats.push("pace");
           renderPhotoArea(photo,
-            '<div class="ocr-status">Detected <b>' + parsed.scores.length + '</b> scores ' +
-            '<span class="confidence ' + parsed.confidence + '">(' + parsed.confidence + ' confidence)</span>. ' +
-            'Please review and correct below.</div>');
+            '<div class="ocr-status">Read <b>' + scoreCount + '</b> scores' + (cats.length ? ' + ' + cats.join(", ") : '') +
+            ' <span class="confidence ' + parsed.confidence + '">(' + parsed.confidence + ' confidence)</span>. Review and correct below.</div>');
           toast("Scorecard read — review the numbers");
         } else {
           renderPhotoArea(photo, '<div class="ocr-status">Couldn\'t read scores automatically — photo saved, enter scores manually.</div>');
@@ -1114,6 +1131,7 @@
       img.status = "reading";
       renderList();
       OCR.recognize(img.dataURL, holes, function () {}).then(function (parsed) {
+        img.parsed = parsed;
         img.scores = parsed.scores;
         img.confidence = parsed.confidence;
         img.status = "done";
@@ -1218,32 +1236,33 @@
       });
 
       const fullCard = $("#bi-fullcard").checked;
+      // Merge a category array across a player's front/back/full scorecard images.
+      function cat(slot, key) {
+        function of(img) { return (img && img.parsed && img.parsed[key]) ? img.parsed[key] : []; }
+        if (slot.full) return of(slot.full).slice(0, 18);
+        const f = of(slot.front).slice(0, 9), bk = of(slot.back).slice(0, 9);
+        if (slot.front && slot.back) return f.concat(bk);
+        return slot.front ? f : bk;
+      }
       let created = 0;
       Object.keys(byPlayer).forEach(function (pid) {
         const slot = byPlayer[pid];
-        let scores, holes, photo;
-        if (slot.full) {
-          scores = slot.full.scores.slice(0, 18); holes = 18; photo = slot.full.dataURL;
-        } else {
-          const front = slot.front ? slot.front.scores.slice(0, 9) : [];
-          const back = slot.back ? slot.back.scores.slice(0, 9) : [];
-          if (slot.front && slot.back) {
-            scores = front.concat(back); holes = 18;
-          } else if (slot.front) {
-            scores = front; holes = 9;
-          } else {
-            scores = back; holes = 9;
-          }
-          photo = (slot.front || slot.back).dataURL;
-        }
+        const holes = slot.full || (slot.front && slot.back) ? 18 : 9;
         Store.addRound(state, {
           playerId: pid,
           eventId: targetEvent.id,
           date: targetEvent.date,
           course: targetEvent.course,
           holes: holes,
-          scores: scores,
-          photo: photo,
+          scores: cat(slot, "scores"),
+          pars: cat(slot, "pars"),
+          fairways: cat(slot, "fairways"),
+          putts: cat(slot, "putts"),
+          girs: cat(slot, "girs"),
+          si: cat(slot, "si"),
+          yards: cat(slot, "yards"),
+          pace: cat(slot, "pace"),
+          photo: (slot.full || slot.front || slot.back).dataURL,
           fullCard: fullCard,
         });
         created++;
