@@ -6,6 +6,7 @@
   let state = Store.load();
   let activeTab = "dashboard";
   let selectedPlayerId = null;
+  let selectedEventId = null;
 
   const $ = function (sel, root) { return (root || document).querySelector(sel); };
   const $$ = function (sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); };
@@ -102,8 +103,13 @@
       app.appendChild(renderPlayerDetail(selectedPlayerId));
       return;
     }
+    if (selectedEventId && activeTab === "events") {
+      app.appendChild(renderEventDetail(selectedEventId));
+      return;
+    }
     switch (activeTab) {
       case "dashboard": app.appendChild(renderDashboard()); break;
+      case "events": app.appendChild(renderEvents()); break;
       case "roster": app.appendChild(renderRoster()); break;
       case "rounds": app.appendChild(renderRounds()); break;
       case "data": app.appendChild(renderData()); break;
@@ -495,12 +501,13 @@
   // =========================================================================
   // ROUND FORM (with photo / OCR)
   // =========================================================================
-  function roundForm(roundId, presetPlayerId) {
+  function roundForm(roundId, presetPlayerId, presetEventId) {
     const editing = !!roundId;
     const r = editing
       ? JSON.parse(JSON.stringify(state.rounds.find(function (x) { return x.id === roundId; })))
       : {
           playerId: presetPlayerId || (state.players[0] && state.players[0].id),
+          eventId: presetEventId || null,
           date: new Date().toISOString().slice(0, 10),
           course: "", tee: "", holes: 18,
           pars: Store.standardPars(18), scores: new Array(18).fill(null),
@@ -752,6 +759,7 @@
         girs: detailed ? girs : new Array(scores.length).fill(null),
         courseRating: $("#rf-rating").value,
         slopeRating: $("#rf-slope").value,
+        eventId: editing ? r.eventId : (presetEventId || null),
         stats: null,
         photo: photo,
         notes: $("#rf-notes").value.trim(),
@@ -773,6 +781,402 @@
   }
 
   // =========================================================================
+  // EVENTS
+  // =========================================================================
+  function openEvent(id) { selectedEventId = id; activeTab = "events"; render(); }
+
+  function renderEvents() {
+    const wrap = document.createElement("div");
+    const head = document.createElement("div");
+    head.className = "section-head";
+    head.innerHTML = '<h2>Events</h2>';
+    const btns = document.createElement("div");
+    btns.className = "btn-row";
+    const imp = document.createElement("button");
+    imp.className = "btn-primary";
+    imp.textContent = "📷 Import from screenshots";
+    imp.onclick = function () {
+      if (!state.players.length) { toast("Add players to your roster first"); activeTab = "roster"; render(); return; }
+      batchImport();
+    };
+    const nw = document.createElement("button");
+    nw.textContent = "+ New event";
+    nw.onclick = function () { eventForm(); };
+    btns.appendChild(imp); btns.appendChild(nw);
+    head.appendChild(btns);
+    wrap.appendChild(head);
+
+    if (!state.events.length) {
+      const c = document.createElement("div");
+      c.className = "card";
+      c.innerHTML = '<p class="empty">No events yet. Use <b>Import from screenshots</b> to drop an event\'s screenshots (event info, leaderboard, and each player\'s front + back nine) and build the whole event at once.</p>';
+      wrap.appendChild(c);
+      return wrap;
+    }
+
+    const grid = document.createElement("div");
+    grid.className = "grid cols-2";
+    state.events.slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; }).forEach(function (ev) {
+      const standings = Stats.eventStandings(state, ev.id);
+      const low = standings.length ? standings[0] : null;
+      const card = document.createElement("div");
+      card.className = "card";
+      card.innerHTML =
+        '<div class="section-head"><h3>' + esc(ev.name) + '</h3><span class="muted">' + esc(ev.date) + '</span></div>' +
+        '<p class="muted" style="margin:0 0 10px">' + esc([ev.course, ev.location].filter(Boolean).join(" · ") || "—") +
+        (ev.startTime ? ' · ' + esc(ev.startTime) : '') + '</p>' +
+        '<div class="grid cols-4" style="gap:8px">' +
+        miniStat(standings.length, "Players") +
+        miniStat(low ? low.total : "—", "Low score") +
+        miniStat(low ? esc(low.player.name.split(" ")[0]) : "—", "Leader") +
+        '</div>';
+      const row = document.createElement("div");
+      row.className = "btn-row";
+      row.style.marginTop = "12px";
+      const open = document.createElement("button");
+      open.className = "btn-sm btn-primary";
+      open.textContent = "Open";
+      open.onclick = function () { openEvent(ev.id); };
+      const xl = document.createElement("button");
+      xl.className = "btn-sm";
+      xl.textContent = "⬇ Workbook";
+      xl.onclick = function () { exportWorkbook(ev); };
+      row.appendChild(open); row.appendChild(xl);
+      card.appendChild(row);
+      grid.appendChild(card);
+    });
+    wrap.appendChild(grid);
+    return wrap;
+  }
+
+  function exportWorkbook(ev) {
+    toast("Building workbook…");
+    Workbook.exportEvent(state, ev).then(function (res) {
+      toast(res.format === "xlsx" ? "Workbook (.xlsx) downloaded" : "Workbook (.csv) downloaded");
+    }).catch(function (err) {
+      toast("Export failed: " + err.message, 4000);
+    });
+  }
+
+  function renderEventDetail(id) {
+    const ev = state.events.find(function (x) { return x.id === id; });
+    const wrap = document.createElement("div");
+    if (!ev) { selectedEventId = null; return renderEvents(); }
+
+    const back = document.createElement("button");
+    back.className = "btn-sm";
+    back.textContent = "← Back to events";
+    back.onclick = function () { selectedEventId = null; render(); };
+    wrap.appendChild(back);
+
+    const head = document.createElement("div");
+    head.className = "section-head";
+    head.style.marginTop = "14px";
+    head.innerHTML = '<h1 style="margin:0">' + esc(ev.name) + '</h1>';
+    const btns = document.createElement("div");
+    btns.className = "btn-row";
+    btns.innerHTML =
+      '<button class="btn-sm btn-primary" id="ed-xl">⬇ Workbook</button>' +
+      '<button class="btn-sm" id="ed-import">📷 Add screenshots</button>' +
+      '<button class="btn-sm" id="ed-edit">Edit</button>';
+    head.appendChild(btns);
+    wrap.appendChild(head);
+
+    const meta = document.createElement("p");
+    meta.className = "muted";
+    meta.style.marginTop = "4px";
+    meta.textContent = [ev.date, ev.startTime, ev.course, ev.location].filter(Boolean).join(" · ") || "No details";
+    wrap.appendChild(meta);
+    if (ev.notes) { const n = document.createElement("p"); n.className = "muted"; n.textContent = ev.notes; wrap.appendChild(n); }
+
+    const standings = Stats.eventStandings(state, id);
+    const lb = document.createElement("div");
+    lb.className = "card";
+    lb.style.marginTop = "12px";
+    lb.innerHTML = '<div class="section-head"><h2>Standings</h2></div>';
+    if (standings.length) {
+      const tw = document.createElement("div");
+      tw.className = "table-wrap";
+      tw.innerHTML = '<table><thead><tr><th>#</th><th>Player</th><th class="num">Total</th><th class="num">+/-</th><th></th></tr></thead><tbody>' +
+        standings.map(function (row, i) {
+          return '<tr><td class="rank ' + (i === 0 ? "top" : "") + '">' + (i + 1) + '</td>' +
+            '<td>' + esc(row.player.name) + '</td>' +
+            '<td class="num">' + row.total + '</td>' +
+            '<td class="num to-par ' + toParClass(row.toPar) + '">' + toParStr(row.toPar) + '</td>' +
+            '<td class="num"><button class="btn-sm" data-edit="' + row.round.id + '">Edit round</button></td></tr>';
+        }).join("") + '</tbody></table>';
+      tw.querySelectorAll("[data-edit]").forEach(function (b) {
+        b.onclick = function () { roundForm(b.dataset.edit); };
+      });
+      lb.appendChild(tw);
+    } else {
+      lb.innerHTML += '<p class="empty">No rounds in this event yet. Use “Add screenshots” or add rounds manually.</p>';
+    }
+    const addBtn = document.createElement("button");
+    addBtn.className = "btn-sm";
+    addBtn.style.marginTop = "10px";
+    addBtn.textContent = "+ Add round manually";
+    addBtn.onclick = function () { roundForm(null, null, id); };
+    lb.appendChild(addBtn);
+    wrap.appendChild(lb);
+
+    // Hole-by-hole card
+    if (standings.length) {
+      const hbh = document.createElement("div");
+      hbh.className = "card";
+      hbh.style.marginTop = "16px";
+      hbh.innerHTML = '<div class="section-head"><h2>Hole-by-hole</h2></div>';
+      const tw = document.createElement("div");
+      tw.className = "table-wrap scorecard";
+      let header = '<tr><th>Player</th>';
+      for (var h = 1; h <= 18; h++) header += '<th>' + h + '</th>';
+      header += '<th class="hole-total">Tot</th></tr>';
+      const parRef = (state.rounds.find(function (r) { return r.eventId === id && r.holes === 18; }) || {}).pars || Store.standardPars(18);
+      let body = '<tr><th>Par</th>';
+      parRef.forEach(function (p) { body += '<td>' + p + '</td>'; });
+      body += '<td class="hole-total">' + parRef.reduce(function (a, b) { return a + b; }, 0) + '</td></tr>';
+      standings.forEach(function (row) {
+        const r = row.round;
+        body += '<tr><th style="text-align:left;white-space:nowrap">' + esc(row.player.name) + '</th>';
+        for (var i = 0; i < 18; i++) {
+          const v = r.scores[i];
+          const par = r.pars[i];
+          const cls = (typeof v === "number" && typeof par === "number") ? (v < par ? "under" : v > par ? "over" : "") : "";
+          body += '<td class="to-par ' + cls + '">' + (v == null ? "" : v) + '</td>';
+        }
+        body += '<td class="hole-total">' + row.total + '</td></tr>';
+      });
+      tw.innerHTML = '<table style="min-width:720px">' + header + body + '</table>';
+      hbh.appendChild(tw);
+      wrap.appendChild(hbh);
+    }
+
+    setTimeout(function () {
+      $("#ed-xl").onclick = function () { exportWorkbook(ev); };
+      $("#ed-import").onclick = function () { batchImport(id); };
+      $("#ed-edit").onclick = function () { eventForm(ev); };
+    }, 0);
+    return wrap;
+  }
+
+  function eventForm(event) {
+    const editing = !!event;
+    const e = event || { name: "", date: new Date().toISOString().slice(0, 10), startTime: "", course: "", location: "", notes: "" };
+    const form = document.createElement("div");
+    form.innerHTML =
+      '<div class="form-row"><div class="field"><label>Event name</label><input id="ef-name" value="' + esc(e.name) + '" placeholder="e.g. Conference Match #3"></div>' +
+      '<div class="field"><label>Date</label><input type="date" id="ef-date" value="' + esc(e.date) + '"></div></div>' +
+      '<div class="form-row"><div class="field"><label>Start time</label><input id="ef-time" value="' + esc(e.startTime) + '" placeholder="e.g. 10:00 AM"></div>' +
+      '<div class="field"><label>Course</label><input id="ef-course" value="' + esc(e.course) + '" placeholder="Course name"></div>' +
+      '<div class="field"><label>Location</label><input id="ef-loc" value="' + esc(e.location) + '" placeholder="City, ST"></div></div>' +
+      '<div class="field"><label>Notes</label><textarea id="ef-notes" rows="2">' + esc(e.notes) + '</textarea></div>' +
+      '<div class="btn-row" style="justify-content:space-between">' +
+      (editing ? '<button class="btn-danger" id="ef-del">Delete event</button>' : '<span></span>') +
+      '<div class="btn-row"><button id="ef-cancel">Cancel</button><button class="btn-primary" id="ef-save">Save</button></div></div>';
+    openModal(editing ? "Edit event" : "New event", form);
+    $("#ef-cancel").onclick = closeModal;
+    $("#ef-save").onclick = function () {
+      const data = {
+        name: $("#ef-name").value.trim() || "Event",
+        date: $("#ef-date").value,
+        startTime: $("#ef-time").value.trim(),
+        course: $("#ef-course").value.trim(),
+        location: $("#ef-loc").value.trim(),
+        notes: $("#ef-notes").value.trim(),
+      };
+      let ev;
+      if (editing) ev = Store.updateEvent(state, e.id, data);
+      else ev = Store.addEvent(state, data);
+      persist(); closeModal();
+      if (!editing) openEvent(ev.id); else render();
+      toast(editing ? "Event updated" : "Event created");
+    };
+    if (editing) {
+      $("#ef-del").onclick = function () {
+        const alsoRounds = confirm("Delete event “" + e.name + "”.\n\nOK = also delete its rounds.\nCancel = keep rounds (just unlink them).");
+        Store.deleteEvent(state, e.id, alsoRounds);
+        persist(); closeModal(); selectedEventId = null; render();
+        toast("Event deleted");
+      };
+    }
+  }
+
+  // =========================================================================
+  // BATCH IMPORT (guided, multi-screenshot, browser OCR)
+  // =========================================================================
+  function batchImport(existingEventId) {
+    const ev = existingEventId ? state.events.find(function (x) { return x.id === existingEventId; }) : null;
+    const today = new Date().toISOString().slice(0, 10);
+    const images = []; // {id, dataURL, type, playerId, nine, scores, status}
+
+    const form = document.createElement("div");
+    form.innerHTML =
+      '<p class="help">Drop all the screenshots for one event. Tag each: <b>Scorecard</b> reads the hole scores (choose the player and whether it\'s the front or back nine — we stitch them into one round). Leaderboard / Event info are kept for reference. Review the totals, then create the event.</p>' +
+      (ev ? '<div class="banner info">Adding rounds to <b>' + esc(ev.name) + '</b></div>' :
+        '<div class="form-row"><div class="field"><label>Event name</label><input id="bi-name" placeholder="e.g. Conference Match #3"></div>' +
+        '<div class="field"><label>Date</label><input type="date" id="bi-date" value="' + today + '"></div></div>' +
+        '<div class="form-row"><div class="field"><label>Start time</label><input id="bi-time" placeholder="e.g. 10:00 AM"></div>' +
+        '<div class="field"><label>Course</label><input id="bi-course" placeholder="Course name"></div>' +
+        '<div class="field"><label>Location</label><input id="bi-loc" placeholder="City, ST"></div></div>') +
+      '<div class="dropzone" id="bi-drop">📷 Click to add screenshots…</div>' +
+      '<input type="file" id="bi-files" accept="image/*" multiple style="display:none">' +
+      '<div id="bi-list" style="margin-top:12px"></div>' +
+      '<div class="btn-row" style="justify-content:space-between;margin-top:14px"><button id="bi-cancel">Cancel</button>' +
+      '<button class="btn-primary" id="bi-create">Create ' + (ev ? "rounds" : "event & rounds") + '</button></div>';
+    openModal(ev ? "Add screenshots" : "Import event from screenshots", form, { wide: true });
+
+    const playerOptions = function (sel) {
+      return state.players.map(function (p) {
+        return '<option value="' + p.id + '"' + (p.id === sel ? " selected" : "") + '>' + esc(p.name) + '</option>';
+      }).join("");
+    };
+
+    function runOCR(img) {
+      if (img.type !== "scorecard") { img.scores = null; img.status = ""; renderList(); return; }
+      const holes = img.nine === "full" ? 18 : 9;
+      img.status = "reading";
+      renderList();
+      OCR.recognize(img.dataURL, holes, function () {}).then(function (parsed) {
+        img.scores = parsed.scores;
+        img.confidence = parsed.confidence;
+        img.status = "done";
+        renderList();
+      }).catch(function (err) {
+        img.status = "error";
+        img.error = err.message;
+        renderList();
+      });
+    }
+
+    function renderList() {
+      const list = $("#bi-list");
+      if (!images.length) { list.innerHTML = ""; return; }
+      list.innerHTML = images.map(function (img, idx) {
+        let detail = "";
+        if (img.type === "scorecard") {
+          detail =
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px">' +
+            '<select data-role="player" data-i="' + idx + '"><option value="">— player —</option>' + playerOptions(img.playerId) + '</select>' +
+            '<select data-role="nine" data-i="' + idx + '">' +
+            '<option value="front"' + (img.nine === "front" ? " selected" : "") + '>Front 9</option>' +
+            '<option value="back"' + (img.nine === "back" ? " selected" : "") + '>Back 9</option>' +
+            '<option value="full"' + (img.nine === "full" ? " selected" : "") + '>Full 18</option></select>' +
+            '<span class="ocr-status">' +
+            (img.status === "reading" ? "reading…" :
+              img.status === "done" ? 'read <b>' + img.scores.filter(function (s) { return s != null; }).length + '</b> scores <span class="confidence ' + img.confidence + '">(' + img.confidence + ')</span>' :
+              img.status === "error" ? '<span style="color:var(--warn)">OCR failed</span>' : "") +
+            '</span>' +
+            (img.status === "done" || img.status === "error" ? '<button class="btn-sm" data-role="reread" data-i="' + idx + '">re-read</button>' : '') +
+            '</div>';
+        }
+        return '<div class="card" style="padding:10px;margin-bottom:8px;display:flex;gap:10px;align-items:flex-start">' +
+          '<img src="' + img.dataURL + '" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--border)">' +
+          '<div style="flex:1;min-width:0">' +
+          '<div style="display:flex;gap:8px;align-items:center;justify-content:space-between">' +
+          '<select data-role="type" data-i="' + idx + '">' +
+          ['scorecard', 'leaderboard', 'eventinfo', 'ignore'].map(function (t) {
+            const labels = { scorecard: "Scorecard", leaderboard: "Leaderboard", eventinfo: "Event info", ignore: "Ignore" };
+            return '<option value="' + t + '"' + (img.type === t ? " selected" : "") + '>' + labels[t] + '</option>';
+          }).join("") + '</select>' +
+          '<button class="btn-sm btn-danger" data-role="remove" data-i="' + idx + '">✕</button></div>' +
+          detail + '</div></div>';
+      }).join("");
+
+      list.querySelectorAll('[data-role="type"]').forEach(function (sel) {
+        sel.onchange = function () {
+          const img = images[Number(sel.dataset.i)];
+          img.type = sel.value;
+          if (img.type === "scorecard" && !img.scores) runOCR(img); else renderList();
+        };
+      });
+      list.querySelectorAll('[data-role="player"]').forEach(function (sel) {
+        sel.onchange = function () { images[Number(sel.dataset.i)].playerId = sel.value; };
+      });
+      list.querySelectorAll('[data-role="nine"]').forEach(function (sel) {
+        sel.onchange = function () { const img = images[Number(sel.dataset.i)]; img.nine = sel.value; runOCR(img); };
+      });
+      list.querySelectorAll('[data-role="reread"]').forEach(function (b) {
+        b.onclick = function () { runOCR(images[Number(b.dataset.i)]); };
+      });
+      list.querySelectorAll('[data-role="remove"]').forEach(function (b) {
+        b.onclick = function () { images.splice(Number(b.dataset.i), 1); renderList(); };
+      });
+    }
+
+    $("#bi-drop").onclick = function () { $("#bi-files").click(); };
+    $("#bi-files").onchange = function (e) {
+      const files = Array.prototype.slice.call(e.target.files);
+      e.target.value = "";
+      files.forEach(function (file) {
+        OCR.fileToScaledDataURL(file).then(function (dataURL) {
+          const img = { id: Store.uid(), dataURL: dataURL, type: "scorecard", playerId: "", nine: "front", scores: null, status: "" };
+          images.push(img);
+          renderList();
+          runOCR(img);
+        });
+      });
+    };
+
+    $("#bi-cancel").onclick = closeModal;
+    $("#bi-create").onclick = function () {
+      // Assemble one round per player from their tagged scorecard images.
+      const cards = images.filter(function (i) { return i.type === "scorecard" && i.playerId && i.scores; });
+      if (!cards.length) { toast("Tag at least one scorecard with a player"); return; }
+
+      let targetEvent = ev;
+      if (!targetEvent) {
+        targetEvent = Store.addEvent(state, {
+          name: $("#bi-name").value.trim() || "Untitled event",
+          date: $("#bi-date").value,
+          startTime: $("#bi-time").value.trim(),
+          course: $("#bi-course").value.trim(),
+          location: $("#bi-loc").value.trim(),
+        });
+      }
+
+      const byPlayer = {};
+      cards.forEach(function (c) {
+        const slot = byPlayer[c.playerId] || (byPlayer[c.playerId] = {});
+        slot[c.nine] = c;
+      });
+
+      let created = 0;
+      Object.keys(byPlayer).forEach(function (pid) {
+        const slot = byPlayer[pid];
+        let scores, holes, photo;
+        if (slot.full) {
+          scores = slot.full.scores.slice(0, 18); holes = 18; photo = slot.full.dataURL;
+        } else {
+          const front = slot.front ? slot.front.scores.slice(0, 9) : [];
+          const back = slot.back ? slot.back.scores.slice(0, 9) : [];
+          if (slot.front && slot.back) {
+            scores = front.concat(back); holes = 18;
+          } else if (slot.front) {
+            scores = front; holes = 9;
+          } else {
+            scores = back; holes = 9;
+          }
+          photo = (slot.front || slot.back).dataURL;
+        }
+        Store.addRound(state, {
+          playerId: pid,
+          eventId: targetEvent.id,
+          date: targetEvent.date,
+          course: targetEvent.course,
+          holes: holes,
+          scores: scores,
+          photo: photo,
+        });
+        created++;
+      });
+
+      persist(); closeModal();
+      openEvent(targetEvent.id);
+      toast("Imported " + created + " round" + (created === 1 ? "" : "s") + " — review and fix any OCR misreads");
+    };
+  }
+
+  // =========================================================================
   // DATA / BACKUP
   // =========================================================================
   function renderData() {
@@ -784,7 +1188,7 @@
     info.className = "card";
     info.innerHTML =
       '<h3>Current data</h3>' +
-      '<p class="muted">' + state.players.length + ' players · ' + state.rounds.length + ' rounds · ' +
+      '<p class="muted">' + state.players.length + ' players · ' + state.events.length + ' events · ' + state.rounds.length + ' rounds · ' +
       (size / 1024).toFixed(0) + ' KB in this browser · last saved ' + esc((state.updatedAt || "").slice(0, 16).replace("T", " ")) + '</p>' +
       '<div class="field" style="max-width:420px"><label>Team name</label><input id="dt-team" value="' + esc(state.team.name) + '"></div>' +
       '<div class="form-row" style="max-width:640px"><div class="field"><label>Season</label><input id="dt-season" value="' + esc(state.team.season || "") + '" placeholder="e.g. Spring 2026"></div>' +
@@ -912,6 +1316,7 @@
       t.onclick = function () {
         activeTab = t.dataset.tab;
         selectedPlayerId = null;
+        selectedEventId = null;
         render();
       };
     });

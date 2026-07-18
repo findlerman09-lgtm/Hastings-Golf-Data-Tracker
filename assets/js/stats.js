@@ -174,6 +174,26 @@
       });
   }
 
+  // Standings for a single event: one entry per player who has a round in it,
+  // ranked by that round's score to par.
+  function eventStandings(state, eventId) {
+    const byPlayer = {};
+    state.rounds.forEach(function (r) {
+      if (r.eventId !== eventId || !isComplete(r)) return;
+      // If a player somehow has multiple rounds in one event, keep the best.
+      const tp = toPar(r);
+      if (!byPlayer[r.playerId] || tp < byPlayer[r.playerId].toPar) {
+        byPlayer[r.playerId] = { round: r, total: roundTotal(r), toPar: tp };
+      }
+    });
+    return Object.keys(byPlayer)
+      .map(function (pid) {
+        const p = state.players.find(function (x) { return x.id === pid; });
+        return { player: p || { name: "Unknown", squad: "" }, round: byPlayer[pid].round, total: byPlayer[pid].total, toPar: byPlayer[pid].toPar };
+      })
+      .sort(function (a, b) { return a.toPar - b.toPar; });
+  }
+
   function teamStats(state) {
     const board = leaderboard(state, 1);
     const avgs = board.map(function (r) { return r.stats.scoringAvg18; }).filter(Boolean);
@@ -207,6 +227,7 @@
     handicapIndex: handicapIndex,
     playerStats: playerStats,
     leaderboard: leaderboard,
+    eventStandings: eventStandings,
     teamStats: teamStats,
     recentRounds: recentRounds,
   };

@@ -22,6 +22,7 @@
       version: SCHEMA_VERSION,
       team: { name: "Hastings Golf", season: "", coach: "" },
       players: [],
+      events: [],
       rounds: [],
       updatedAt: new Date().toISOString(),
     };
@@ -59,9 +60,11 @@
   function migrate(state) {
     if (!state || typeof state !== "object") return defaultState();
     if (!Array.isArray(state.players)) state.players = [];
+    if (!Array.isArray(state.events)) state.events = [];
     if (!Array.isArray(state.rounds)) state.rounds = [];
     if (!state.team) state.team = { name: "Hastings Golf", season: "", coach: "" };
     state.rounds.forEach(function (r) {
+      if (r.eventId === undefined) r.eventId = null;
       if (typeof r.holes !== "number") r.holes = r.scores ? r.scores.length : 18;
       if (!Array.isArray(r.pars)) r.pars = standardPars(r.holes || 18);
       if (!Array.isArray(r.fairways)) r.fairways = new Array(r.holes).fill(null);
@@ -103,11 +106,45 @@
     state.rounds = state.rounds.filter(function (r) { return r.playerId !== id; });
   }
 
+  function addEvent(state, data) {
+    const ev = {
+      id: uid(),
+      name: (data.name || "Event").trim(),
+      date: data.date || new Date().toISOString().slice(0, 10),
+      startTime: data.startTime || "",
+      course: (data.course || "").trim(),
+      location: (data.location || "").trim(),
+      notes: data.notes || "",
+      createdAt: new Date().toISOString(),
+    };
+    state.events.push(ev);
+    return ev;
+  }
+
+  function updateEvent(state, id, data) {
+    const ev = state.events.find(function (x) { return x.id === id; });
+    if (!ev) return null;
+    ["name", "date", "startTime", "course", "location", "notes"].forEach(function (k) {
+      if (k in data) ev[k] = data[k];
+    });
+    return ev;
+  }
+
+  function deleteEvent(state, id, deleteRounds) {
+    state.events = state.events.filter(function (e) { return e.id !== id; });
+    if (deleteRounds) {
+      state.rounds = state.rounds.filter(function (r) { return r.eventId !== id; });
+    } else {
+      state.rounds.forEach(function (r) { if (r.eventId === id) r.eventId = null; });
+    }
+  }
+
   function addRound(state, data) {
     const holes = data.holes === 9 ? 9 : 18;
     const round = {
       id: uid(),
       playerId: data.playerId,
+      eventId: data.eventId || null,
       date: data.date || new Date().toISOString().slice(0, 10),
       course: (data.course || "").trim(),
       tee: data.tee || "",
@@ -142,7 +179,7 @@
       r.girs = normalizeBoolArray(r.girs, r.holes);
       r.yards = normalizeArray(r.yards, r.holes, null);
     }
-    ["date", "course", "tee", "notes", "photo", "stats"].forEach(function (k) {
+    ["date", "course", "tee", "notes", "photo", "stats", "eventId"].forEach(function (k) {
       if (k in data) r[k] = data[k];
     });
     if ("courseRating" in data) r.courseRating = numOrNull(data.courseRating);
@@ -219,6 +256,10 @@
     inc.players.forEach(function (p) {
       if (!playerIds.has(p.id)) merged.players.push(p);
     });
+    const eventIds = new Set(merged.events.map(function (e) { return e.id; }));
+    inc.events.forEach(function (e) {
+      if (!eventIds.has(e.id)) merged.events.push(e);
+    });
     const roundIds = new Set(merged.rounds.map(function (r) { return r.id; }));
     inc.rounds.forEach(function (r) {
       if (!roundIds.has(r.id)) merged.rounds.push(r);
@@ -235,6 +276,9 @@
     load: load,
     save: save,
     migrate: migrate,
+    addEvent: addEvent,
+    updateEvent: updateEvent,
+    deleteEvent: deleteEvent,
     addPlayer: addPlayer,
     updatePlayer: updatePlayer,
     deletePlayer: deletePlayer,

@@ -61,6 +61,32 @@ off for a quick score-only entry.
 > CDN). If it can't load, the photo is still saved and you can enter scores
 > manually.
 
+### Events & batch screenshot import
+An **event** (a meet/match) groups the round each player shot that day, plus the
+event details (date, start time, course, location).
+
+The **Events → Import from screenshots** flow is built for the real workflow of
+one event = ~15 screenshots:
+
+1. Enter the event details (or let them come from your event-info screenshot).
+2. Drop **all** the event's screenshots at once.
+3. Tag each image:
+   - **Scorecard** → pick the player and whether it's their **front nine**,
+     **back nine**, or **full 18**. Browser OCR reads the hole scores.
+   - **Leaderboard** / **Event info** → kept for reference.
+4. The app **stitches each player's front + back nine into one 18-hole round**
+   and creates the event. Review the standings and fix any OCR misreads in the
+   normal round editor.
+
+### Per-event workbook export
+From any event, **⬇ Workbook** downloads a multi-sheet spreadsheet:
+**Event** (details), **Leaderboard** (standings + fairways/putts/GIR), and
+**Hole-by-Hole** (every player, all 18 holes, with Out/In/Total/± vs par).
+
+> The workbook uses [SheetJS](https://sheetjs.com/) (loaded on demand) to build
+> a real `.xlsx`. If that library can't load, it falls back to a `.csv` bundle
+> so the export never fails.
+
 ### Backup & publish
 
 Open the **Backup & Publish** tab:
@@ -103,9 +129,13 @@ as-is.)
   "players": [
     { "id": "...", "name": "Alex Morgan", "classYear": "2026", "squad": "Varsity" }
   ],
+  "events": [
+    { "id": "...", "name": "Legacy at Hastings Invitational", "date": "2026-04-30",
+      "startTime": "10:00 AM", "course": "Legacy at Hastings", "location": "Hastings, MN" }
+  ],
   "rounds": [
     {
-      "id": "...", "playerId": "...", "date": "2026-04-05",
+      "id": "...", "playerId": "...", "eventId": "...", "date": "2026-04-05",
       "course": "Hastings Muni", "tee": "White", "holes": 18,
       "pars":     [4,4,4,3,5, ...],
       "scores":   [5,4,6,3,5, ...],
@@ -129,11 +159,12 @@ public.html         Read-only public dashboard
 data/data.json      Published team data (commit your export here)
 assets/css/app.css  Styles (light + dark)
 assets/js/
-  store.js          Data model, persistence, import/export
-  stats.js          Derived golf statistics
+  store.js          Data model (players, events, rounds), persistence, import/export
+  stats.js          Derived golf statistics + handicap + event standings
   charts.js         Dependency-free SVG charts
   ocr.js            Photo downscaling + Tesseract.js OCR
-  app.js            Coach app UI
+  workbook.js       Per-event .xlsx/.csv workbook export (SheetJS on demand)
+  app.js            Coach app UI (dashboard, events, batch import, roster, rounds)
   public.js         Public dashboard UI
 .github/workflows/pages.yml   Optional GitHub Pages deploy
 ```
