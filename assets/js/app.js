@@ -578,7 +578,7 @@
     let si = (r.si || []).slice();
     let pace = (r.pace || []).slice();
     let photo = r.photo;
-    let detailed = [r.fairways, r.putts, r.girs, r.yards, r.si].some(function (a) {
+    let detailed = !!r.fullCard || [r.fairways, r.putts, r.girs, r.yards, r.si].some(function (a) {
       return (a || []).some(function (v) { return v !== null; });
     }) || (r.pace || []).some(function (v) { return v; });
 
@@ -832,6 +832,7 @@
         startHole: $("#rf-starthole").value,
         scorer: $("#rf-scorer").value,
         attest: $("#rf-attest").value,
+        fullCard: detailed,
         eventId: editing ? r.eventId : (presetEventId || null),
         stats: null,
         photo: photo,
@@ -1093,6 +1094,9 @@
         '<div class="field"><label>Location</label><input id="bi-loc" placeholder="City, ST"></div></div>') +
       '<div class="dropzone" id="bi-drop">📷 Click to add screenshots…</div>' +
       '<input type="file" id="bi-files" accept="image/*" multiple style="display:none">' +
+      '<label style="display:flex;align-items:center;gap:8px;margin-top:10px;cursor:pointer">' +
+      '<input type="checkbox" id="bi-fullcard" checked style="width:auto"> ' +
+      '<span>Import as <b>full round</b> — turn on the putts / fairways / GIR / yardage / SI / pace rows so you can fill them in when reviewing.</span></label>' +
       '<div id="bi-list" style="margin-top:12px"></div>' +
       '<div class="btn-row" style="justify-content:space-between;margin-top:14px"><button id="bi-cancel">Cancel</button>' +
       '<button class="btn-primary" id="bi-create">Create ' + (ev ? "rounds" : "event & rounds") + '</button></div>';
@@ -1213,6 +1217,7 @@
         slot[c.nine] = c;
       });
 
+      const fullCard = $("#bi-fullcard").checked;
       let created = 0;
       Object.keys(byPlayer).forEach(function (pid) {
         const slot = byPlayer[pid];
@@ -1239,6 +1244,7 @@
           holes: holes,
           scores: scores,
           photo: photo,
+          fullCard: fullCard,
         });
         created++;
       });

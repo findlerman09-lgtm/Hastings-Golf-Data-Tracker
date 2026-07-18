@@ -85,6 +85,11 @@ one event = ~15 screenshots:
    and creates the event. Review the standings and fix any OCR misreads in the
    normal round editor.
 
+Leave **"Import as full round"** checked (the default) and each imported round
+opens with the full-card grid already on, so the Putt / Fairway / GIR / Yardage
+/ SI / Pace rows are ready to fill in while you review — no need to toggle
+"Full card" on every round.
+
 ### Per-event workbook export
 From any event, **⬇ Workbook** downloads a multi-sheet spreadsheet:
 **Event** (details), **Leaderboard** (standings + fairways/putts/GIR), and
