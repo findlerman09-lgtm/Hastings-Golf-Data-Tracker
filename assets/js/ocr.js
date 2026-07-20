@@ -35,6 +35,42 @@
     return tesseractPromise;
   }
 
+  // Grayscale + contrast-stretch (and mild upscale) to help Tesseract read a
+  // dense, low-contrast app screenshot. Returns a PNG data URL for OCR only —
+  // the stored photo stays the original color version.
+  function preprocessForOCR(dataURL, maxDim) {
+    maxDim = maxDim || 2000;
+    return new Promise(function (resolve, reject) {
+      const img = new Image();
+      img.onload = function () {
+        try {
+          let { width, height } = img;
+          const scale = Math.min(2.2, maxDim / Math.max(width, height)); // allow upscaling small shots
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+          const c = document.createElement("canvas");
+          c.width = width; c.height = height;
+          const ctx = c.getContext("2d");
+          ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+          ctx.drawImage(img, 0, 0, width, height);
+          const id = ctx.getImageData(0, 0, width, height);
+          const d = id.data;
+          const contrast = 1.7, intercept = 128 * (1 - contrast);
+          for (var i = 0; i < d.length; i += 4) {
+            let g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+            g = g * contrast + intercept;
+            g = g < 0 ? 0 : g > 255 ? 255 : g;
+            d[i] = d[i + 1] = d[i + 2] = g;
+          }
+          ctx.putImageData(id, 0, 0);
+          resolve(c.toDataURL("image/png"));
+        } catch (err) { resolve(dataURL); } // fall back to the raw image
+      };
+      img.onerror = function () { resolve(dataURL); };
+      img.src = dataURL;
+    });
+  }
+
   function fileToScaledDataURL(file, maxDim) {
     maxDim = maxDim || 1600;
     return new Promise(function (resolve, reject) {
@@ -279,6 +315,10 @@
       const c = classifyRows(rows, expectedHoles);
       Object.assign(base, c);
     }
+    // Debug: the reconstructed rows, so the coach can see what OCR actually read.
+    base.debugRows = rows.map(function (r) {
+      return r.map(function (cell) { return cell.text; }).join("  ");
+    });
     if (!base.scores || !base.scores.some(function (v) { return v != null; })) {
       // Positional parse didn't find a score row — fall back to the text heuristic.
       const fb = parseScores(data.text || "", expectedHoles);
@@ -295,31 +335,41 @@
   }
 
   // Run OCR on a data URL and return the parsed card.
+  // PSM 6 = "assume a single uniform block of text", which keeps the table's row
+  // structure better than the default auto mode on a dense scorecard grid.
   function recognize(dataURL, expectedHoles, onProgress) {
     return loadTesseract().then(function (Tesseract) {
-      const logger = function (m) {
-        if (onProgress && m.status === "recognizing text") onProgress(Math.round(m.progress * 100));
-      };
-      // Worker API so we reliably get word/block bounding boxes.
-      if (Tesseract.createWorker) {
-        return Promise.resolve(Tesseract.createWorker("eng", 1, { logger: logger })).then(function (worker) {
-          return worker.setParameters({ tessedit_char_whitelist: WHITELIST }).then(function () {
-            return worker.recognize(dataURL, {}, { text: true, blocks: true });
-          }).then(function (out) {
-            return worker.terminate().then(function () { return parseCard(out.data, expectedHoles); });
-          }).catch(function (err) {
-            return worker.terminate().then(function () { throw err; });
+      return preprocessForOCR(dataURL).then(function (prepURL) {
+        const logger = function (m) {
+          if (onProgress && m.status === "recognizing text") onProgress(Math.round(m.progress * 100));
+        };
+        const params = {
+          tessedit_char_whitelist: WHITELIST,
+          tessedit_pageseg_mode: "6",
+          preserve_interword_spaces: "1",
+        };
+        // Worker API so we reliably get word/block bounding boxes.
+        if (Tesseract.createWorker) {
+          return Promise.resolve(Tesseract.createWorker("eng", 1, { logger: logger })).then(function (worker) {
+            return worker.setParameters(params).then(function () {
+              return worker.recognize(prepURL, {}, { text: true, blocks: true });
+            }).then(function (out) {
+              return worker.terminate().then(function () { return parseCard(out.data, expectedHoles); });
+            }).catch(function (err) {
+              return worker.terminate().then(function () { throw err; });
+            });
           });
-        });
-      }
-      // Older API fallback.
-      return Tesseract.recognize(dataURL, "eng", { logger: logger, tessedit_char_whitelist: WHITELIST })
-        .then(function (out) { return parseCard(out.data, expectedHoles); });
+        }
+        // Older API fallback.
+        return Tesseract.recognize(prepURL, "eng", Object.assign({ logger: logger }, params))
+          .then(function (out) { return parseCard(out.data, expectedHoles); });
+      });
     });
   }
 
   global.OCR = {
     fileToScaledDataURL: fileToScaledDataURL,
+    preprocessForOCR: preprocessForOCR,
     parseScores: parseScores,
     parseCard: parseCard,
     clusterRows: clusterRows,
