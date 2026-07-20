@@ -39,6 +39,17 @@
     return tp < 0 ? "under" : "over";
   }
 
+  // Collapsible panel showing exactly what OCR detected, for diagnosing misreads.
+  function ocrDebug(parsed) {
+    if (!parsed) return "";
+    const rows = (parsed.debugRows && parsed.debugRows.length)
+      ? parsed.debugRows.join("\n")
+      : (parsed.raw || "(nothing detected)");
+    return '<details style="margin-top:6px"><summary style="cursor:pointer;font-size:.8rem;color:var(--muted)">🔍 What OCR read (tap to expand)</summary>' +
+      '<pre style="white-space:pre-wrap;font-size:.7rem;line-height:1.5;max-height:200px;overflow:auto;background:var(--surface-2);padding:8px;border-radius:6px;margin-top:6px">' +
+      esc(rows) + '</pre></details>';
+  }
+
   // ---- Toast --------------------------------------------------------------
   let toastTimer = null;
   function toast(msg, ms) {
@@ -806,10 +817,10 @@
           if (parsed.pace && parsed.pace.some(function (v) { return v; })) cats.push("pace");
           renderPhotoArea(photo,
             '<div class="ocr-status">Read <b>' + scoreCount + '</b> scores' + (cats.length ? ' + ' + cats.join(", ") : '') +
-            ' <span class="confidence ' + parsed.confidence + '">(' + parsed.confidence + ' confidence)</span>. Review and correct below.</div>');
+            ' <span class="confidence ' + parsed.confidence + '">(' + parsed.confidence + ' confidence)</span>. Review and correct below.</div>' + ocrDebug(parsed));
           toast("Scorecard read — review the numbers");
         } else {
-          renderPhotoArea(photo, '<div class="ocr-status">Couldn\'t read scores automatically — photo saved, enter scores manually.</div>');
+          renderPhotoArea(photo, '<div class="ocr-status">Couldn\'t read the scorecard automatically — photo saved, enter values manually.</div>' + ocrDebug(parsed));
         }
       }).catch(function (err) {
         console.error(err);
@@ -1162,7 +1173,8 @@
               img.status === "error" ? '<span style="color:var(--warn)">OCR failed</span>' : "") +
             '</span>' +
             (img.status === "done" || img.status === "error" ? '<button class="btn-sm" data-role="reread" data-i="' + idx + '">re-read</button>' : '') +
-            '</div>';
+            '</div>' +
+            (img.status === "done" && img.parsed ? ocrDebug(img.parsed) : "");
         }
         return '<div class="card" style="padding:10px;margin-bottom:8px;display:flex;gap:10px;align-items:flex-start">' +
           '<img src="' + img.dataURL + '" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--border)">' +

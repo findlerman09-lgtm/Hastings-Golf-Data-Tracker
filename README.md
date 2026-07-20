@@ -67,6 +67,12 @@ entry.
 3. **Review and correct** the detected values — OCR of a scorecard is never
    perfect — then save. The photo is stored with the round for reference.
 
+The image is grayscaled and contrast-boosted before recognition to help
+Tesseract. Expand **"What OCR read"** under the photo (in Log round or the
+importer) to see exactly what was detected — useful for spotting misreads.
+OCR quality depends heavily on the screenshot; for the most reliable reads,
+crop tightly to the scorecard grid.
+
 > OCR needs an internet connection the first time (to load the library from a
 > CDN). If it can't load, the photo is still saved and you can enter scores
 > manually.
