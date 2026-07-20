@@ -35,16 +35,17 @@
     return tesseractPromise;
   }
 
-  // Pixel transform for OCR: erase red annotations (scorecard apps circle
-  // scores and draw a red side bar in red, which corrupt those digits once
-  // grayscaled), then grayscale + contrast-stretch the rest. Mutates in place.
+  // Pixel transform for OCR. Scorecard apps mark birdies with a red circle AND
+  // draw the score itself in red — so we force reddish pixels to BLACK (not
+  // white), turning red digits into readable black digits, then grayscale +
+  // contrast-stretch the rest. Mutates in place.
   function transformPixels(d) {
     const contrast = 1.7, intercept = 128 * (1 - contrast);
     for (var i = 0; i < d.length; i += 4) {
       const r = d[i], gg = d[i + 1], bb = d[i + 2];
       let g;
       if (r > 110 && r - gg > 40 && r - bb > 40) {
-        g = 255; // reddish pixel — wipe it to white so the black digit survives
+        g = 0; // reddish pixel (red score / circle) — make it black so it reads
       } else {
         g = 0.299 * r + 0.587 * gg + 0.114 * bb;
         g = g * contrast + intercept;
