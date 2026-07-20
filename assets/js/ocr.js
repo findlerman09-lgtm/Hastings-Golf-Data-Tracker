@@ -35,9 +35,28 @@
     return tesseractPromise;
   }
 
-  // Grayscale + contrast-stretch (and mild upscale) to help Tesseract read a
-  // dense, low-contrast app screenshot. Returns a PNG data URL for OCR only —
-  // the stored photo stays the original color version.
+  // Pixel transform for OCR: erase red annotations (scorecard apps circle
+  // scores and draw a red side bar in red, which corrupt those digits once
+  // grayscaled), then grayscale + contrast-stretch the rest. Mutates in place.
+  function transformPixels(d) {
+    const contrast = 1.7, intercept = 128 * (1 - contrast);
+    for (var i = 0; i < d.length; i += 4) {
+      const r = d[i], gg = d[i + 1], bb = d[i + 2];
+      let g;
+      if (r > 110 && r - gg > 40 && r - bb > 40) {
+        g = 255; // reddish pixel — wipe it to white so the black digit survives
+      } else {
+        g = 0.299 * r + 0.587 * gg + 0.114 * bb;
+        g = g * contrast + intercept;
+        g = g < 0 ? 0 : g > 255 ? 255 : g;
+      }
+      d[i] = d[i + 1] = d[i + 2] = g;
+    }
+  }
+
+  // Erase red annotations, grayscale, contrast-stretch (and mildly upscale) to
+  // help Tesseract read a dense app screenshot. Returns a PNG data URL for OCR
+  // only — the stored photo stays the original color version.
   function preprocessForOCR(dataURL, maxDim) {
     maxDim = maxDim || 2000;
     return new Promise(function (resolve, reject) {
@@ -54,14 +73,7 @@
           ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
           ctx.drawImage(img, 0, 0, width, height);
           const id = ctx.getImageData(0, 0, width, height);
-          const d = id.data;
-          const contrast = 1.7, intercept = 128 * (1 - contrast);
-          for (var i = 0; i < d.length; i += 4) {
-            let g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-            g = g * contrast + intercept;
-            g = g < 0 ? 0 : g > 255 ? 255 : g;
-            d[i] = d[i + 1] = d[i + 2] = g;
-          }
+          transformPixels(id.data);
           ctx.putImageData(id, 0, 0);
           resolve(c.toDataURL("image/png"));
         } catch (err) { resolve(dataURL); } // fall back to the raw image
@@ -370,6 +382,7 @@
   global.OCR = {
     fileToScaledDataURL: fileToScaledDataURL,
     preprocessForOCR: preprocessForOCR,
+    transformPixels: transformPixels,
     parseScores: parseScores,
     parseCard: parseCard,
     clusterRows: clusterRows,
